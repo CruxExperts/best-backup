@@ -1,0 +1,62 @@
+# bbackup Agent Instructions
+
+This repo contains the source for `bbackup`, a Python backup utility and its
+maintenance tooling.
+
+## Operating Model
+
+- Treat `/mnt/data/devzone/bbackup` as the active development checkout.
+- Treat `origin` as `https://github.com/CruxExperts/best-backup.git`.
+- Keep repo policy in this file and durable user-facing docs under `docs/` or
+  root entry points such as `README.md`, `INSTALL.md`, and `QUICKSTART.md`.
+- Keep runtime state, logs, caches, and agent run ledgers out of Git.
+- Use Localsetup-native commands before editing Codex adapter state manually.
+
+## Scope Control
+
+- Make surgical changes that trace directly to the task.
+- Do not refactor unrelated backup, restore, encryption, Docker, or TUI code
+  while doing maintenance setup.
+- Do not commit secrets, keys, backup archives, local service logs, generated
+  runtime state, or machine-specific configuration.
+- Preserve the existing `.agent/` content unless the user explicitly asks to
+  migrate or remove it.
+
+## Localsetup
+
+This checkout uses a Localsetup-managed Codex skills adapter. Inspect it with:
+
+```bash
+localsetup adapters --target-directory /mnt/data/devzone/bbackup --platforms codex
+```
+
+Run the repo-level doctor with:
+
+```bash
+localsetup doctor --target-directory /mnt/data/devzone/bbackup --global-preset core --repo-preset core --platforms codex --dependency-mode uv-sync --json
+```
+
+If adapter shape needs to change, use `localsetup install`, `localsetup plan`,
+or `localsetup detach` before manual edits under `.codex/`.
+
+## Development Commands
+
+```bash
+python3 -m py_compile bbackup.py bbman.py bbackup/*.py scripts/*.py
+```
+
+```bash
+python3 -m pytest
+```
+
+```bash
+git diff --check
+```
+
+## Documentation
+
+- Update docs in the same task when behavior, commands, install steps, or
+  maintenance workflow changes.
+- Prefer updating existing docs over creating new documents.
+- Keep command examples copy-ready and avoid documenting machine-specific
+  secrets or private paths unless they are explicitly local runtime examples.

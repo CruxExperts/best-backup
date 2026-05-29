@@ -36,8 +36,14 @@ ENV/
 # Cursor (IDE-local, not tracked)
 .cursor/
 
-# Localsetup framework (tooling, not part of this repo)
+# Localsetup and Codex runtime state (tooling, not part of this repo)
 _localsetup/
+.localsetup/
+.codex/skills/
+.codex/runs/
+.codex/sessions/
+.codex/logs/
+.codex/tmp/
 
 # Release and maintenance tooling (local only, not published)
 maintenance/
