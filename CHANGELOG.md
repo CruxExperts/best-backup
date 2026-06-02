@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). This project uses [semantic versioning](https://semver.org/).
 
+Historical entries preserve the install and packaging guidance that was current
+for that release. Use `README.md`, `INSTALL.md`, and `docs/VERSIONING.md` for
+current uv-based install, development, and release instructions.
+
 ---
 
 ## [Unreleased]
@@ -189,18 +193,18 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ---
 
-[Unreleased]: https://github.com/cptnfren/best-backup/compare/v1.7.0...HEAD
-[1.7.0]: https://github.com/cptnfren/best-backup/compare/v1.6.0...v1.7.0
-[1.6.0]: https://github.com/cptnfren/best-backup/compare/v1.5.0...v1.6.0
-[1.5.0]: https://github.com/cptnfren/best-backup/compare/v1.4.0...v1.5.0
-[1.4.0]: https://github.com/cptnfren/best-backup/compare/v1.3.3...v1.4.0
-[1.3.3]: https://github.com/cptnfren/best-backup/compare/v1.3.2...v1.3.3
-[1.3.2]: https://github.com/cptnfren/best-backup/compare/v1.3.1...v1.3.2
-[1.3.1]: https://github.com/cptnfren/best-backup/compare/v1.3.0...v1.3.1
-[1.3.0]: https://github.com/cptnfren/best-backup/compare/v1.2.1...v1.3.0
-[1.2.1]: https://github.com/cptnfren/best-backup/compare/v1.2.0...v1.2.1
-[1.2.0]: https://github.com/cptnfren/best-backup/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/cptnfren/best-backup/releases/tag/v1.1.0
+[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/CruxExperts/best-backup/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/CruxExperts/best-backup/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/CruxExperts/best-backup/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/CruxExperts/best-backup/compare/v1.3.3...v1.4.0
+[1.3.3]: https://github.com/CruxExperts/best-backup/compare/v1.3.2...v1.3.3
+[1.3.2]: https://github.com/CruxExperts/best-backup/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/CruxExperts/best-backup/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/CruxExperts/best-backup/compare/v1.2.1...v1.3.0
+[1.2.1]: https://github.com/CruxExperts/best-backup/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/CruxExperts/best-backup/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/CruxExperts/best-backup/releases/tag/v1.1.0
 
 <!-- project-footer:start -->
 
@@ -208,7 +212,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 <p align="center">
 Slavic Kozyuk<br>
-&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/cptnfren/best-backup/blob/main/LICENSE">MIT License</a>
+&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/CruxExperts/best-backup/blob/main/LICENSE">MIT License</a>
 </p>
 
 <!-- project-footer:end -->

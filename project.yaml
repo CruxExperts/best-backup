@@ -1,12 +1,11 @@
 # project.yaml
-# Single source of truth for project identity.
-# Consumed by maintenance/stamp.py to sync footers, code files, and GitHub metadata.
-# Update this file, then run: python maintenance/stamp.py
+# Project identity metadata for docs, packaging, and maintainer automation.
+# Keep this file aligned with README.md, pyproject.toml, and GitHub metadata.
 
 project:
   name: bbackup
   description: "Docker Backup Tool with Rich TUI"
-  repository: "https://github.com/cptnfren/best-backup"
+  repository: "https://github.com/CruxExperts/best-backup"
 
 author:
   name: "Slavic Kozyuk"

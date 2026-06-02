@@ -6,22 +6,28 @@ Thanks for taking the time to contribute. This document covers how to set up a d
 
 ## Development setup
 
-For contributing you need an editable install so source changes take effect immediately. Clone the repo and use a virtual environment (pipx does not support editable mode):
+For contributing you need a UV-managed editable environment so source changes take effect immediately:
 
 ```bash
-git clone https://github.com/cptnfren/best-backup.git
+git clone https://github.com/CruxExperts/best-backup.git
 cd best-backup
 
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+uv sync --locked
 
 # Verify
-bbackup --version
-bbman --version
+uv run bbackup --version
+uv run bbman --version
 ```
 
 You will need Docker running locally to test backup and restore operations. `rsync` is required for volume backups; install it with your system package manager if it is not already present.
+
+Enable the repo-managed Git hooks once per checkout:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hooks validate conventional commit subjects and run release-readiness checks before push. See [docs/VERSIONING.md](../docs/VERSIONING.md) for the full version and release checklist.
 
 ---
 
@@ -32,7 +38,7 @@ Keep changes focused. A pull request that fixes one bug or adds one feature is e
 Run the syntax check before pushing:
 
 ```bash
-python3 -m py_compile bbackup/*.py bbackup/management/*.py
+uv run python -m py_compile bbackup.py bbman.py bbackup/*.py bbackup/data/*.py bbackup/management/*.py scripts/*.py
 ```
 
 ---
@@ -89,7 +95,7 @@ This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). Treat every
 
 <p align="center">
 Slavic Kozyuk<br>
-&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/cptnfren/best-backup/blob/main/LICENSE">MIT License</a>
+&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/CruxExperts/best-backup/blob/main/LICENSE">MIT License</a>
 </p>
 
 <!-- project-footer:end -->

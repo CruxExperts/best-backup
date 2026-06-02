@@ -30,8 +30,8 @@ Planning task:
 
 Validation commands to include in the plan:
 - git status --short --ignored
-- python3 -m py_compile bbackup.py bbman.py bbackup/*.py scripts/*.py
-- python3 -m pytest
+- uv run python -m py_compile bbackup.py bbman.py bbackup/*.py bbackup/data/*.py bbackup/management/*.py scripts/*.py
+- uv run pytest
 - localsetup adapters --target-directory /mnt/data/devzone/bbackup --platforms codex
 - localsetup doctor --target-directory /mnt/data/devzone/bbackup --global-preset core --repo-preset core --platforms codex --dependency-mode uv-sync --json
 

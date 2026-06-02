@@ -7,7 +7,6 @@ Last Updated: 2026-03-04
 """
 
 import gzip
-import shutil
 import tarfile
 import tempfile
 from pathlib import Path

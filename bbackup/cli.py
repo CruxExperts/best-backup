@@ -29,6 +29,7 @@ from .backup_runner import BackupRunner
 from .restore import DockerRestore
 from .logging import setup_logging
 from .encryption import EncryptionManager
+from .resources import read_text_resource, resource_exists
 from .cli_utils import (
     output_option,
     input_json_option,
@@ -38,7 +39,6 @@ from .cli_utils import (
     json_error,
     EXIT_SUCCESS,
     EXIT_USER_ERROR,
-    EXIT_CONFIG_ERROR,
     EXIT_SYSTEM_ERROR,
     EXIT_PARTIAL,
     EXIT_CANCELLED,
@@ -47,8 +47,8 @@ from .cli_utils import (
 from .skills import get_skill
 
 
-SKILLS_DOC_PATH = Path(__file__).parent.parent / "docs" / "cli-skills.md"
-SKILLS_INDEX_PATH = Path(__file__).parent.parent / "docs" / "cli-skills-index.json"
+SKILLS_DOC_RESOURCE = "cli-skills.md"
+SKILLS_INDEX_RESOURCE = "cli-skills-index.json"
 
 
 @click.group()
@@ -813,10 +813,8 @@ def init_config(ctx, skills, output, input_json):
     config_dir = os.path.dirname(config_path)
     os.makedirs(config_dir, exist_ok=True)
 
-    example_config = Path(__file__).parent.parent / "config.yaml.example"
-    if example_config.exists():
-        import shutil
-        shutil.copy(example_config, config_path)
+    if resource_exists("config.yaml.example"):
+        Path(config_path).write_text(read_text_resource("config.yaml.example"), encoding="utf-8")
         render_output({"config_path": config_path, "created": True}, output, "init-config")
         if output != "json":
             console.print(f"[green]Configuration file created: {config_path}[/green]")
@@ -973,12 +971,12 @@ def _print_command_skills(cli_name: str, command_name: str) -> None:
     """
     Print the skills documentation section for a specific CLI command and exit.
     """
-    if not SKILLS_DOC_PATH.exists() or not SKILLS_INDEX_PATH.exists():
+    if not resource_exists(SKILLS_DOC_RESOURCE) or not resource_exists(SKILLS_INDEX_RESOURCE):
         sys.stderr.write("Skills documentation has not been generated yet.\n")
         sys.exit(EXIT_SYSTEM_ERROR)
 
     try:
-        index = json.loads(SKILLS_INDEX_PATH.read_text(encoding="utf-8"))
+        index = json.loads(read_text_resource(SKILLS_INDEX_RESOURCE))
     except Exception as exc:
         sys.stderr.write(f"Failed to read skills index: {exc}\n")
         sys.exit(EXIT_SYSTEM_ERROR)
@@ -989,7 +987,7 @@ def _print_command_skills(cli_name: str, command_name: str) -> None:
         sys.stderr.write(f"No skills entry found for command {cmd_id}.\n")
         sys.exit(EXIT_USER_ERROR)
 
-    lines = SKILLS_DOC_PATH.read_text(encoding="utf-8").splitlines()
+    lines = read_text_resource(SKILLS_DOC_RESOURCE).splitlines()
     start = max(int(meta.get("start", 1)) - 1, 0)
     end = min(int(meta.get("end", len(lines))), len(lines))
     section = "\n".join(lines[start:end]) + "\n"
@@ -1001,10 +999,10 @@ def _print_skills_markdown() -> None:
     """
     Print the full Markdown skills catalog to stdout and exit.
     """
-    if not SKILLS_DOC_PATH.exists():
+    if not resource_exists(SKILLS_DOC_RESOURCE):
         sys.stderr.write("Skills documentation has not been generated yet.\n")
         sys.exit(EXIT_SYSTEM_ERROR)
-    sys.stdout.write(SKILLS_DOC_PATH.read_text(encoding="utf-8"))
+    sys.stdout.write(read_text_resource(SKILLS_DOC_RESOURCE))
     sys.exit(EXIT_SUCCESS)
 
 

@@ -55,12 +55,20 @@ def check_system_tool(tool: str) -> Tuple[bool, str]:
 
 def check_python_packages() -> Tuple[bool, List[str]]:
     """Check if required Python packages are installed."""
-    required = ["rich", "pyyaml", "docker", "click", "paramiko", "cryptography", "requests"]
+    required = {
+        "rich": "rich",
+        "pyyaml": "yaml",
+        "docker": "docker",
+        "click": "click",
+        "paramiko": "paramiko",
+        "cryptography": "cryptography",
+        "requests": "requests",
+    }
     missing = []
     
-    for package in required:
+    for package, import_name in required.items():
         try:
-            __import__(package.replace("-", "_"))
+            __import__(import_name)
         except ImportError:
             missing.append(package)
     

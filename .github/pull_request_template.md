@@ -16,7 +16,7 @@
 
 ## Checklist
 
-- [ ] Code runs without syntax errors (`python3 -m py_compile bbackup/*.py`)
+- [ ] Code runs without syntax errors (`uv run python -m py_compile bbackup.py bbman.py bbackup/*.py bbackup/data/*.py bbackup/management/*.py scripts/*.py`)
 - [ ] Commit messages follow conventional commit format (`feat:`, `fix:`, `docs:`, etc.)
 - [ ] Documentation updated if behavior changed
 - [ ] No secrets, keys, or personal data included

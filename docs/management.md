@@ -42,7 +42,7 @@ bbman health --output json    # Machine-readable result
 Checks:
 - Docker daemon is running and your user has socket access
 - System tools: `rsync`, `tar`, `rclone`
-- Python dependencies match `requirements.txt`
+- Python dependencies match `pyproject.toml`
 - Config file parses without errors
 - Staging and log directories are writable
 
@@ -166,7 +166,7 @@ Manage the repository URL used for update checks and downloads.
 
 ```bash
 bbman repo-url                              # Show current URL and its source
-bbman repo-url --url https://github.com/YOUR_USERNAME/best-backup
+bbman repo-url --url https://github.com/CruxExperts/best-backup
 bbman repo-url --output json
 ```
 
@@ -255,7 +255,7 @@ See [README.md](../README.md#agent-integration) for exit code reference and the 
 `~/.config/bbackup/management.yaml` controls wrapper behavior:
 
 ```yaml
-repo_url: "https://github.com/YOUR_USERNAME/best-backup"
+repo_url: "https://github.com/CruxExperts/best-backup"
 auto_check_updates: true
 check_interval_days: 7
 auto_setup_on_first_run: true
@@ -351,7 +351,7 @@ Back to [README.md](../README.md).
 
 <p align="center">
 Slavic Kozyuk<br>
-&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/cptnfren/best-backup/blob/main/LICENSE">MIT License</a>
+&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/CruxExperts/best-backup/blob/main/LICENSE">MIT License</a>
 </p>
 
 <!-- project-footer:end -->

@@ -1,19 +1,17 @@
 """
 Repository URL management with configurable default and override support.
 
-The default URL is a placeholder. Set the actual repo URL via:
+The default URL is the public project repository. Override it via:
   - Environment variable: BBACKUP_REPO_URL
   - Config file:          ~/.config/bbackup/management.yaml → repo_url
-  - CLI:                  bbman repo-url --url https://github.com/YOUR_USERNAME/best-backup
+  - CLI:                  bbman repo-url --url https://github.com/CruxExperts/best-backup
 """
 
 import os
 from pathlib import Path
 import yaml
 
-# Placeholder default: override via BBACKUP_REPO_URL env var, management config,
-# or `bbman repo-url --url URL`.
-DEFAULT_REPO_URL = "https://github.com/YOUR_USERNAME/best-backup"
+DEFAULT_REPO_URL = "https://github.com/CruxExperts/best-backup"
 
 
 def get_repo_url() -> str:

@@ -2,11 +2,11 @@
 Agentic sandbox test runner for bbackup.
 Builds a Docker test image, runs pytest inside it, streams output live,
 and on failure applies targeted auto-fixes then retries. Writes a final
-report to docs/tests/ci-test-report.md regardless of outcome.
+local report to .localsetup/reports/ci-test-report.md regardless of outcome.
 
 Usage:
-    python scripts/run_tests.py [--unit] [--integration] [--all]
-                                [--no-sandbox] [--max-retries N]
+    uv run python scripts/run_tests.py [--unit] [--integration] [--all]
+                                       [--no-sandbox] [--max-retries N]
 
 Default: --unit (excludes integration tests).
 --no-sandbox: runs pytest directly on host without Docker (useful for CI).
@@ -24,8 +24,8 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-DOCS_TESTS_DIR = REPO_ROOT / "docs" / "tests"
-REPORT_FILE = DOCS_TESTS_DIR / "ci-test-report.md"
+REPORT_DIR = REPO_ROOT / ".localsetup" / "reports"
+REPORT_FILE = REPORT_DIR / "ci-test-report.md"
 IMAGE_TAG = "bbackup:test"
 MAX_RETRIES_DEFAULT = 3
 
@@ -257,8 +257,8 @@ def write_report(
     attempt_count: int,
     coverage_data: dict,
 ):
-    """Write ci-test-report.md to docs/tests/."""
-    DOCS_TESTS_DIR.mkdir(parents=True, exist_ok=True)
+    """Write ci-test-report.md to ignored local report state."""
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     python_version = sys.version.split()[0]
@@ -337,7 +337,7 @@ def main():
     if not args.no_sandbox:
         build_image()
 
-    output_dir = REPO_ROOT / "docs" / "tests" / "output"
+    output_dir = REPORT_DIR / "output"
     all_fixes = []
     attempt = 0
     exit_code = 1

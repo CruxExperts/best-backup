@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+set -eu
+
+msg_file="$1"
+
+first_line=$(sed -n '1p' "$msg_file")
+
+case "$first_line" in
+  Merge\ *|Revert\ *)
+    exit 0
+    ;;
+esac
+
+if ! printf '%s\n' "$first_line" | grep -Eq '^(feat|fix|docs|refactor|perf|test|chore|build|ci|style)(\([A-Za-z0-9_.-]+\))?!?: .+'; then
+  cat >&2 <<'EOF'
+commit-msg: expected a conventional commit subject.
+Example: fix: handle missing Docker socket gracefully
+Allowed types: feat, fix, docs, refactor, perf, test, chore, build, ci, style
+EOF
+  exit 1
+fi

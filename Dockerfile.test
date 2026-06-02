@@ -1,12 +1,12 @@
 FROM python:3.12-slim
 RUN apt-get update \
-    && apt-get install -y rsync docker.io \
+    && apt-get install -y curl rsync docker.io \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY requirements.txt requirements-dev.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-install-project
 COPY bbackup/ bbackup/
-COPY bbackup.py setup.py ./
-RUN pip install -e .
+COPY bbackup.py bbman.py ./
+RUN uv sync --locked
 COPY tests/ tests/
-COPY pytest.ini ./

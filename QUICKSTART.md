@@ -6,29 +6,29 @@
 
 ## Step 1: Install
 
-`pipx` handles the virtual environment automatically and wires `bbackup` and `bbman` into your PATH.
+`uv` handles the isolated tool environment automatically and wires `bbackup` and `bbman` into your PATH.
 
 **Single user** (commands available only to you):
 
 ```bash
-sudo apt install pipx
-pipx ensurepath
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv tool update-shell
 ```
 
 Open a new shell, then:
 
 ```bash
-pipx install git+https://github.com/cptnfren/best-backup.git
+uv tool install git+https://github.com/CruxExperts/best-backup.git
 ```
 
 **Server / all users** (commands available to every user and cron jobs):
 
 ```bash
-sudo apt install pipx
-sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install git+https://github.com/cptnfren/best-backup.git
+curl -LsSf https://astral.sh/uv/install.sh | sh
+sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool install git+https://github.com/CruxExperts/best-backup.git
 ```
 
-If you already have `bbackup` installed via `pipx` and only need to update it, run `pipx upgrade bbackup` for a single-user install or `sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx upgrade bbackup` for the server-wide method, rather than re-running `pipx install`. See [INSTALL.md](INSTALL.md) for uninstall and alternative install methods.
+If you already have `bbackup` installed via `uv` and only need to update it, run `uv tool upgrade bbackup` for a single-user install or `sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool upgrade bbackup` for the server-wide method, rather than re-running `uv tool install`. See [INSTALL.md](INSTALL.md) for uninstall and alternative install methods.
 
 ---
 
@@ -260,7 +260,7 @@ See [README.md](README.md#agent-integration) for the full agent integration refe
 
 <p align="center">
 Slavic Kozyuk<br>
-&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/cptnfren/best-backup/blob/main/LICENSE">MIT License</a>
+&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/CruxExperts/best-backup/blob/main/LICENSE">MIT License</a>
 </p>
 
 <!-- project-footer:end -->

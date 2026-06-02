@@ -21,7 +21,7 @@ Please do not open a public GitHub issue for security vulnerabilities.
 
 Use GitHub's private vulnerability reporting instead:
 
-1. Go to the [Security tab](https://github.com/cptnfren/best-backup/security) of this repository.
+1. Go to the [Security tab](https://github.com/CruxExperts/best-backup/security) of this repository.
 2. Click "Report a vulnerability."
 3. Describe the issue, steps to reproduce, and potential impact.
 
@@ -51,7 +51,7 @@ Back to [README.md](README.md).
 
 <p align="center">
 Slavic Kozyuk<br>
-&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/cptnfren/best-backup/blob/main/LICENSE">MIT License</a>
+&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/CruxExperts/best-backup/blob/main/LICENSE">MIT License</a>
 </p>
 
 <!-- project-footer:end -->

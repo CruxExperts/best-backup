@@ -4,6 +4,8 @@ Dependency checking and installation.
 
 import subprocess
 import sys
+import re
+import tomllib
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -90,25 +92,29 @@ def check_python_dependencies() -> Tuple[bool, List[str], List[str]]:
     return len(missing) == 0, installed, missing
 
 
-def check_requirements_file() -> List[str]:
+def _package_name(requirement: str) -> str:
+    """Extract a normalized package name from a PEP 508 requirement string."""
+    requirement = requirement.split(";", 1)[0].strip()
+    requirement = requirement.split("[", 1)[0].strip()
+    return re.split(r"[<>=!~]", requirement, maxsplit=1)[0].strip()
+
+
+def check_project_dependencies() -> List[str]:
     """
-    Read requirements from requirements.txt.
+    Read runtime dependency names from pyproject.toml.
     
     Returns:
-        List of package names from requirements.txt
+        List of package names from pyproject.toml
     """
-    req_file = Path(__file__).parent.parent.parent / "requirements.txt"
+    pyproject_file = Path(__file__).parent.parent.parent / "pyproject.toml"
     packages = []
     
-    if req_file.exists():
-        with open(req_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    # Extract package name (before ==, >=, etc.)
-                    package = line.split('>=')[0].split('==')[0].split('>')[0].split('<')[0].strip()
-                    if package:
-                        packages.append(package)
+    if pyproject_file.exists():
+        data = tomllib.loads(pyproject_file.read_text(encoding="utf-8"))
+        for dependency in data.get("project", {}).get("dependencies", []):
+            package = _package_name(dependency)
+            if package:
+                packages.append(package)
     
     return packages
 
@@ -126,7 +132,7 @@ def is_externally_managed() -> bool:
     Return True if this Python install is marked as externally managed (PEP 668).
 
     Modern Debian/Ubuntu ship an EXTERNALLY-MANAGED marker file alongside the
-    system Python. We only enable the "do not pip install here" guard when that
+    system Python. We only enable the "do not install here" guard when that
     marker is present so that tests and non-PEP 668 environments can still
     exercise the installer logic.
     """
@@ -144,10 +150,10 @@ def is_externally_managed() -> bool:
 
 def install_python_packages(packages: List[str]) -> bool:
     """
-    Install Python packages using pip.
+    Install Python packages using uv pip.
 
     On Ubuntu 22.04+ / Debian 12+ the system Python is externally managed
-    (PEP 668) and bare pip installs are blocked. If we detect an externally
+    (PEP 668) and bare installs are blocked. If we detect an externally
     managed Python and we are not inside a virtual environment, we surface a
     clear message rather than letting pip fail with a confusing error. On
     non-PEP 668 environments we allow the install to proceed (the call is
@@ -161,7 +167,7 @@ def install_python_packages(packages: List[str]) -> bool:
     """
     if is_externally_managed() and not is_venv():
         console.print(
-            "[yellow]⚠ pip install skipped: the current Python is not inside a "
+            "[yellow]⚠ package install skipped: the current Python is not inside a "
             "virtual environment.[/yellow]\n"
             "[dim]On Ubuntu 22.04+ / Debian 12+ the system Python is externally "
             "managed (PEP 668).\n"
@@ -172,13 +178,13 @@ def install_python_packages(packages: List[str]) -> bool:
         return False
     try:
         subprocess.run(
-            [sys.executable, "-m", "pip", "install"] + packages,
+            ["uv", "pip", "install", "--python", sys.executable] + packages,
             check=True,
         )
         return True
     except Exception as exc:
         console.print(
-            f"[red]✗ pip install failed:[/red] [dim]{exc}[/dim]"
+            f"[red]✗ uv pip install failed:[/red] [dim]{exc}[/dim]"
         )
         return False
 
@@ -199,8 +205,8 @@ def check_and_install_dependencies(install_missing: bool = False) -> Dict:
     # Check Python dependencies
     all_installed, installed_pkgs, missing_pkgs = check_python_dependencies()
     
-    # Check requirements.txt
-    required_pkgs = check_requirements_file()
+    # Check pyproject.toml
+    required_pkgs = check_project_dependencies()
     
     results = {
         "system": system_deps,

@@ -8,7 +8,7 @@
 
 | Component | Library / tool | Version |
 |---|---|---|
-| Language | Python | 3.10+ |
+| Language | Python | 3.12+ |
 | CLI framework | Click | 8.1.7+ |
 | Terminal UI | Rich | 13.7.0+ |
 | Docker integration | docker-py SDK | 7.0.0+ |
@@ -247,8 +247,8 @@ best-backup/
 ├── bbackup.py              # bbackup entry point
 ├── bbman.py                # bbman entry point
 ├── config.yaml.example
-├── requirements.txt
-└── setup.py
+├── pyproject.toml
+└── uv.lock
 ```
 
 ---
@@ -261,7 +261,7 @@ Back to [README.md](../README.md).
 
 <p align="center">
 Slavic Kozyuk<br>
-&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/cptnfren/best-backup/blob/main/LICENSE">MIT License</a>
+&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/CruxExperts/best-backup/blob/main/LICENSE">MIT License</a>
 </p>
 
 <!-- project-footer:end -->

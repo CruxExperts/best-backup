@@ -13,13 +13,32 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify release version and publishing readiness
+        run: |
+          test "${{ steps.version.outputs.version }}" = "$(cat VERSION)"
+          uv sync --locked
+          uv run python scripts/check_version_sync.py
+          uv run python scripts/check_publishing_ready.py
+          uv run ruff check bbackup/ scripts/check_publishing_ready.py scripts/check_version_sync.py scripts/smoke_installed_artifact.py
+          uv run python scripts/generate_cli_skills.py --check
+          uv run python -m py_compile bbackup.py bbman.py bbackup/*.py bbackup/data/*.py bbackup/management/*.py scripts/*.py
+          uv run pytest
 
       - name: Extract changelog section for this version
         id: changelog
@@ -28,15 +47,23 @@ jobs:
           # Pull the block between the version header and the next version header
           NOTES=$(awk "/^## \[$VERSION\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
           if [ -z "$NOTES" ]; then
-            NOTES="See CHANGELOG.md for details."
+            echo "No CHANGELOG.md section found for v$VERSION" >&2
+            exit 1
           fi
           # Write to file to preserve newlines
           echo "$NOTES" > release_notes.txt
 
+      - name: Build release artifacts
+        run: uv build
+
+      - name: Smoke test built wheel
+        run: uv run python scripts/smoke_installed_artifact.py
+
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: "v${{ steps.version.outputs.version }}"
           body_path: release_notes.txt
+          files: dist/*
           draft: false
           prerelease: false

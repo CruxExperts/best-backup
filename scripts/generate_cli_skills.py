@@ -14,13 +14,17 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
 from bbackup import __version__ as BBACKUP_VERSION
 from bbackup.cli_metadata import CliCommand, get_command_registry
 
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
 DOC_PATH = REPO_ROOT / "docs" / "cli-skills.md"
 INDEX_PATH = REPO_ROOT / "docs" / "cli-skills-index.json"
+PACKAGE_DOC_PATH = REPO_ROOT / "bbackup" / "data" / "cli-skills.md"
+PACKAGE_INDEX_PATH = REPO_ROOT / "bbackup" / "data" / "cli-skills-index.json"
 
 
 def _render_header(lines: List[str]) -> None:
@@ -131,10 +135,14 @@ def generate_markdown_and_index() -> Dict[str, Dict[str, int]]:
         meta["end"] = next_start - 1
         index[cmd_id] = meta
 
-    content = "\n".join(lines) + "\n"
+    content = "\n".join(lines).rstrip() + "\n"
+    index_content = json.dumps(index, indent=2, sort_keys=True) + "\n"
     DOC_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PACKAGE_DOC_PATH.parent.mkdir(parents=True, exist_ok=True)
     DOC_PATH.write_text(content, encoding="utf-8")
-    INDEX_PATH.write_text(json.dumps(index, indent=2, sort_keys=True), encoding="utf-8")
+    INDEX_PATH.write_text(index_content, encoding="utf-8")
+    PACKAGE_DOC_PATH.write_text(content, encoding="utf-8")
+    PACKAGE_INDEX_PATH.write_text(index_content, encoding="utf-8")
 
     return index
 
@@ -142,11 +150,16 @@ def generate_markdown_and_index() -> Dict[str, Dict[str, int]]:
 def check_up_to_date() -> bool:
     if not DOC_PATH.exists() or not INDEX_PATH.exists():
         return False
+    if not PACKAGE_DOC_PATH.exists() or not PACKAGE_INDEX_PATH.exists():
+        return False
 
     # Generate into memory and compare (normalize newlines and trailing blanks)
     text_before = DOC_PATH.read_text(encoding="utf-8").replace("\r\n", "\n").rstrip("\n")
+    package_text_before = PACKAGE_DOC_PATH.read_text(encoding="utf-8").replace("\r\n", "\n").rstrip("\n")
     with open(INDEX_PATH, "r", encoding="utf-8") as f:
         index_before = json.load(f)
+    with open(PACKAGE_INDEX_PATH, "r", encoding="utf-8") as f:
+        package_index_before = json.load(f)
 
     # Temporarily generate to a temp structure
     lines: List[str] = []
@@ -174,7 +187,11 @@ def check_up_to_date() -> bool:
     text_after = "\n".join(lines).replace("\r\n", "\n").rstrip("\n")
     if text_after != text_before:
         return False
+    if text_after != package_text_before:
+        return False
     if index != index_before:
+        return False
+    if index != package_index_before:
         return False
     return True
 
@@ -203,4 +220,3 @@ def main(argv: List[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-

@@ -4,7 +4,7 @@
 
 **Back up Docker containers and host filesystems — encrypted, incremental, and agent-ready.**
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.7.0-6366f1?style=flat-square)](CHANGELOG.md)
 
@@ -15,10 +15,10 @@
 ---
 
 ```bash
-pipx install git+https://github.com/cptnfren/best-backup.git
+uv tool install git+https://github.com/CruxExperts/best-backup.git
 ```
 
-`pipx` handles the virtual environment automatically. If `bbackup` is already installed and you want to move to a newer version, use `pipx upgrade bbackup` (or the system-wide variant from [Installation](#installation)) instead of re-running `pipx install`. See [Installation](#installation) if you need to install `pipx` first, or for alternative methods.
+`uv` handles the isolated tool environment automatically. If `bbackup` is already installed and you want to move to a newer version, use `uv tool upgrade bbackup` (or the system-wide variant from [Installation](#installation)) instead of re-running `uv tool install`. See [Installation](#installation) if you need to install `uv` first, or for alternative methods.
 
 ---
 
@@ -51,7 +51,7 @@ Every command speaks structured JSON, making it compatible with AI agents out of
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.12+
 - Docker (with socket access for your user)
 - `rsync` (system package — used for volume and filesystem backups)
 - `rclone` (optional, for Google Drive)
@@ -60,47 +60,48 @@ Every command speaks structured JSON, making it compatible with AI agents out of
 
 ## Installation
 
-`pipx` handles the virtual environment automatically. Pick the method that fits your setup.
+`uv` handles the tool environment automatically. Pick the method that fits your setup.
 
-### pipx install (single user)
+### uv tool install (single user)
 
 Use this when installing `bbackup` for the first time for your user only:
 
 ```bash
-sudo apt install pipx && pipx ensurepath
-pipx install git+https://github.com/cptnfren/best-backup.git
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv tool update-shell
+uv tool install git+https://github.com/CruxExperts/best-backup.git
 ```
 
 Open a new shell and both commands are ready.
 
-### pipx upgrade (single user)
+### uv tool upgrade (single user)
 
-If `bbackup` is already installed via pipx and you just want to move to a newer version:
+If `bbackup` is already installed via uv and you just want to move to a newer version:
 
 ```bash
-pipx upgrade bbackup
+uv tool upgrade bbackup
 ```
 
-Use `pipx reinstall bbackup` if you want a fresh virtual environment.
+Use `uv tool install --force git+https://github.com/CruxExperts/best-backup.git` if you want a fresh tool environment.
 
-### pipx install (server / all users)
+### uv tool install (server / all users)
 
 Installs to `/usr/local/bin` and makes `bbackup` and `bbman` available to every user and cron job:
 
 ```bash
-sudo apt install pipx
-sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install git+https://github.com/cptnfren/best-backup.git
+curl -LsSf https://astral.sh/uv/install.sh | sh
+sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool install git+https://github.com/CruxExperts/best-backup.git
 ```
 
-### pipx upgrade (server / all users)
+### uv tool upgrade (server / all users)
 
-If `bbackup` is already installed system-wide via pipx and you want to update in place:
+If `bbackup` is already installed system-wide via uv and you want to update in place:
 
 ```bash
-sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx upgrade bbackup
+sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool upgrade bbackup
 ```
 
-For development installs, manual venv setup, and uninstall instructions, see [INSTALL.md](INSTALL.md).
+For development setup, local source installs, and uninstall instructions, see [INSTALL.md](INSTALL.md).
 
 ---
 
@@ -301,7 +302,7 @@ Level-0 JSON output:
 ```json
 {
   "cli": "bbackup",
-  "version": "1.4.0",
+  "version": "1.7.0",
   "agent_hint": "Set BBACKUP_OUTPUT=json and BBACKUP_NO_INTERACTIVE=1 for fully non-interactive use.",
   "skills": [
     {"id": "docker-backup",     "summary": "Back up Docker containers, volumes, networks, and configs.", "common": true},
@@ -447,8 +448,8 @@ best-backup/
 ├── bbackup.py                # bbackup entry point
 ├── bbman.py                  # bbman entry point
 ├── config.yaml.example       # Annotated config template
-├── requirements.txt
-└── setup.py
+├── pyproject.toml
+└── uv.lock
 ```
 
 ---
@@ -462,9 +463,12 @@ best-backup/
 | [docs/management.md](docs/management.md) | Full `bbman` reference |
 | [docs/encryption.md](docs/encryption.md) | Encryption setup and key management |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
-| [CONTRIBUTING.md](.github/CONTRIBUTING.md) | How to contribute |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [SECURITY.md](SECURITY.md) | How to report vulnerabilities |
+| [SUPPORT.md](SUPPORT.md) | Where to ask questions or get help |
 | [docs/cli-skills.md](docs/cli-skills.md) | Unified CLI skills catalog for humans and AI agents |
+| [docs/VERSIONING.md](docs/VERSIONING.md) | Version source of truth, hook setup, and release validation |
+| [docs/PUBLISHING_CHECKLIST.md](docs/PUBLISHING_CHECKLIST.md) | GitHub publishing and release readiness checklist |
 
 ---
 
@@ -509,7 +513,7 @@ Built with [Rich](https://github.com/Textualize/rich), [Click](https://github.co
 
 <p align="center">
 Slavic Kozyuk<br>
-&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/cptnfren/best-backup/blob/main/LICENSE">MIT License</a>
+&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/CruxExperts/best-backup/blob/main/LICENSE">MIT License</a>
 </p>
 
 <!-- project-footer:end -->

@@ -42,11 +42,27 @@ or `localsetup detach` before manual edits under `.codex/`.
 ## Development Commands
 
 ```bash
-python3 -m py_compile bbackup.py bbman.py bbackup/*.py scripts/*.py
+git config core.hooksPath .githooks
 ```
 
 ```bash
-python3 -m pytest
+uv sync --locked
+```
+
+```bash
+uv run python scripts/check_version_sync.py
+```
+
+```bash
+uv run python scripts/check_publishing_ready.py
+```
+
+```bash
+uv run python -m py_compile bbackup.py bbman.py bbackup/*.py bbackup/data/*.py bbackup/management/*.py scripts/*.py
+```
+
+```bash
+uv run pytest
 ```
 
 ```bash

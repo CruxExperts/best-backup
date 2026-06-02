@@ -14,13 +14,13 @@ import os
 import sys
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
 
 # Gap 12: import __version__ instead of hardcoding "1.0.0"
 from bbackup import __version__
+from bbackup.resources import read_text_resource, resource_exists
 
 from bbackup.cli_utils import (
     output_option,
@@ -33,15 +33,15 @@ from bbackup.cli_utils import (
     EXIT_USER_ERROR,
     EXIT_CONFIG_ERROR,
     EXIT_SYSTEM_ERROR,
-    EXIT_PARTIAL,
     EXIT_CANCELLED,
     BBACKUP_NO_INTERACTIVE_ENV,
 )
 from bbackup.skills import get_skill
 
 
-SKILLS_DOC_PATH = Path(__file__).parent / "docs" / "cli-skills.md"
-SKILLS_INDEX_PATH = Path(__file__).parent / "docs" / "cli-skills-index.json"
+SKILLS_DOC_RESOURCE = "cli-skills.md"
+SKILLS_INDEX_RESOURCE = "cli-skills-index.json"
+CANONICAL_REPO_URL = "https://github.com/CruxExperts/best-backup"
 
 # Default repository URL: auto-detected from git remote, then placeholder.
 # Set BBACKUP_REPO_URL env var or run `bbman repo-url --url URL` to override.
@@ -56,9 +56,9 @@ try:
     if _git_result.returncode == 0:
         DEFAULT_REPO_URL = _git_result.stdout.strip().replace(".git", "")
     else:
-        DEFAULT_REPO_URL = "https://github.com/YOUR_USERNAME/best-backup"
+        DEFAULT_REPO_URL = CANONICAL_REPO_URL
 except Exception:
-    DEFAULT_REPO_URL = "https://github.com/YOUR_USERNAME/best-backup"
+    DEFAULT_REPO_URL = CANONICAL_REPO_URL
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -580,7 +580,7 @@ def update(ctx, branch, method, yes, skills, output, input_json):
             sys.exit(EXIT_SUCCESS)
 
         if output != "json":
-            console.print(f"[yellow]Updates available:[/yellow]")
+            console.print("[yellow]Updates available:[/yellow]")
             console.print(f"  [dim]Changed: {len(update_info.get('changed', []))} files[/dim]")
             console.print(f"  [dim]New: {len(update_info.get('new', []))} files[/dim]")
             console.print(f"  [dim]Removed: {len(update_info.get('removed', []))} files[/dim]")
@@ -600,7 +600,7 @@ def update(ctx, branch, method, yes, skills, output, input_json):
         render_output(result, output, "update", success=bool(result.get("success")))
         if output != "json":
             if result.get("success"):
-                console.print(f"[green]Update completed successfully![/green]")
+                console.print("[green]Update completed successfully![/green]")
                 console.print(f"[dim]Files updated: {result.get('files_updated', 0)}[/dim]")
                 if result.get("backup_dir"):
                     console.print(f"[dim]Backup saved to: {result['backup_dir']}[/dim]")
@@ -773,12 +773,12 @@ def _print_command_skills(cli_name: str, command_name: str) -> None:
     """
     Print the skills documentation section for a specific CLI command and exit.
     """
-    if not SKILLS_DOC_PATH.exists() or not SKILLS_INDEX_PATH.exists():
+    if not resource_exists(SKILLS_DOC_RESOURCE) or not resource_exists(SKILLS_INDEX_RESOURCE):
         console.print("[red]Skills documentation has not been generated yet.[/red]")
         sys.exit(EXIT_SYSTEM_ERROR)
 
     try:
-        index = json.loads(SKILLS_INDEX_PATH.read_text(encoding="utf-8"))
+        index = json.loads(read_text_resource(SKILLS_INDEX_RESOURCE))
     except Exception as exc:
         console.print(f"[red]Failed to read skills index: {exc}[/red]")
         sys.exit(EXIT_SYSTEM_ERROR)
@@ -789,7 +789,7 @@ def _print_command_skills(cli_name: str, command_name: str) -> None:
         console.print(f"[red]No skills entry found for command {cmd_id}.[/red]")
         sys.exit(EXIT_USER_ERROR)
 
-    lines = SKILLS_DOC_PATH.read_text(encoding="utf-8").splitlines()
+    lines = read_text_resource(SKILLS_DOC_RESOURCE).splitlines()
     start = max(int(meta.get("start", 1)) - 1, 0)
     end = min(int(meta.get("end", len(lines))), len(lines))
     section = "\n".join(lines[start:end]) + "\n"
@@ -801,10 +801,10 @@ def _print_skills_markdown() -> None:
     """
     Print the full Markdown skills catalog to stdout and exit.
     """
-    if not SKILLS_DOC_PATH.exists():
+    if not resource_exists(SKILLS_DOC_RESOURCE):
         console.print("[red]Skills documentation has not been generated yet.[/red]")
         sys.exit(EXIT_SYSTEM_ERROR)
-    sys.stdout.write(SKILLS_DOC_PATH.read_text(encoding="utf-8"))
+    sys.stdout.write(read_text_resource(SKILLS_DOC_RESOURCE))
     sys.exit(EXIT_SUCCESS)
 
 

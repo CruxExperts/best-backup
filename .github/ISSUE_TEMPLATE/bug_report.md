@@ -27,10 +27,10 @@ $ bbackup ...
 ## Environment
 
 - OS and version:
-- Python version (`python3 --version`):
+- Python version (`uv run python --version` or `python3 --version`):
 - Docker version (`docker --version`):
 - bbackup version (`bbackup --version`):
-- Installation method (pip install / symlink / PATH):
+- Installation method (uv tool / uv sync / symlink / PATH):
 
 ## Configuration
 

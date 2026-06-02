@@ -219,12 +219,13 @@ func main() {
     fmt.Println("Hello, World!")
 }
 ''',
-            "Dockerfile": '''FROM python:3.9-slim
+            "Dockerfile": '''FROM python:3.12-slim
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked
 COPY . .
-CMD ["python", "app.py"]
+CMD ["uv", "run", "python", "app.py"]
 ''',
         }
         

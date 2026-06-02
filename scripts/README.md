@@ -11,9 +11,9 @@
 Generates a test filesystem with 13,000+ files across realistic directory structures (archives, projects, documents, media). Useful for testing backup, restore, and incremental backup behavior without touching real data.
 
 ```bash
-python scripts/create_sandbox.py --output /tmp/bbackup_sandbox
-python scripts/create_sandbox.py --output /tmp/bbackup_sandbox --quick   # Fewer files, faster
-python scripts/create_sandbox.py --output /tmp/bbackup_sandbox --file-count 5000
+uv run python scripts/create_sandbox.py --output /tmp/bbackup_sandbox
+uv run python scripts/create_sandbox.py --output /tmp/bbackup_sandbox --quick   # Fewer files, faster
+uv run python scripts/create_sandbox.py --output /tmp/bbackup_sandbox --file-count 5000
 ```
 
 Options:
@@ -35,7 +35,7 @@ Options:
 Runs backup scenarios against the sandbox created by `create_sandbox.py` and logs results.
 
 ```bash
-python scripts/test_sandbox_backups.py
+uv run python scripts/test_sandbox_backups.py
 ```
 
 ---
@@ -88,7 +88,7 @@ Back to [README.md](../README.md).
 
 <p align="center">
 Slavic Kozyuk<br>
-&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/cptnfren/best-backup/blob/main/LICENSE">MIT License</a>
+&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/CruxExperts/best-backup/blob/main/LICENSE">MIT License</a>
 </p>
 
 <!-- project-footer:end -->

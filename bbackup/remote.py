@@ -96,7 +96,7 @@ class RemoteStorageManager:
         try:
             import paramiko
         except ImportError:
-            self.console.print("[red]Error: paramiko not installed. Install with: pip install paramiko[/red]")
+            self.console.print("[red]Error: paramiko not installed. Run: uv sync[/red]")
             return False
         
         try:

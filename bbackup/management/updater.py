@@ -31,8 +31,8 @@ def backup_repository(repo_root: Path, backup_dir: Path) -> bool:
             "bbackup",
             "bbackup.py",
             "bbman.py",
-            "setup.py",
-            "requirements.txt",
+            "pyproject.toml",
+            "uv.lock",
             "config.yaml.example",
         ]
         

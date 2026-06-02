@@ -4,131 +4,131 @@
 
 ---
 
-## Recommended: pipx, single user
+## Recommended: uv tool, single user
 
-`pipx` installs bbackup into an isolated virtual environment and wires `bbackup` and `bbman` into your PATH. You never have to activate anything.
+`uv tool install` installs bbackup into an isolated tool environment and links
+`bbackup` and `bbman` into the uv tool bin directory.
 
-### Install (single user)
+### Install uv
 
 ```bash
-# Install pipx (Ubuntu/Debian)
-sudo apt install pipx
-pipx ensurepath   # adds ~/.local/bin to PATH — one-time setup
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv tool update-shell
+```
 
-# Install bbackup into a dedicated venv and add it to PATH
-pipx install git+https://github.com/cptnfren/best-backup.git
+Open a new shell after `uv tool update-shell`, then install bbackup:
+
+```bash
+uv tool install git+https://github.com/CruxExperts/best-backup.git
 
 # Verify
 bbackup --version
 bbman --version
 ```
 
-### Update (single user)
+### Update
 
 ```bash
-pipx upgrade bbackup
+uv tool upgrade bbackup
 ```
 
-If you run `pipx install ...` again after `bbackup` is already installed, pipx prints a message like:
+Use `uv tool install --force git+https://github.com/CruxExperts/best-backup.git`
+if you want a fresh tool environment.
 
-```text
-'bbackup' already seems to be installed. Not modifying existing installation. Pass '--force' to force installation.
-```
-
-This is expected. Use `pipx upgrade bbackup` to pull a newer version, or `pipx reinstall bbackup` if you want a fresh virtual environment.
-
-### Uninstall (single user)
+### Uninstall
 
 ```bash
-pipx uninstall bbackup
+uv tool uninstall bbackup
 ```
 
 ---
 
-## Server install: pipx, system-wide (all users)
+## Server install: uv tool, system-wide
 
-The single-user method above installs only for the user who ran it. On a shared server, or when cron jobs run as root or another user, use the system-wide approach instead. It places `bbackup` and `bbman` in `/usr/local/bin`, which is on every user's PATH by default.
-
-### Install (server / all users)
+For shared servers or cron jobs that need commands under `/usr/local/bin`, run
+uv with explicit tool directories:
 
 ```bash
-sudo apt install pipx
-sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install git+https://github.com/cptnfren/best-backup.git
+curl -LsSf https://astral.sh/uv/install.sh | sh
+sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool install git+https://github.com/CruxExperts/best-backup.git
 
 # Verify as any user
 bbackup --version
 bbman --version
 ```
 
-### Update (server / all users)
+Update or uninstall with the same directory environment:
 
 ```bash
-sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx upgrade bbackup
+sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool upgrade bbackup
+sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool uninstall bbackup
 ```
 
-### Uninstall (server / all users)
-
-```bash
-sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx uninstall bbackup
-```
-
-Note: `pipx ensurepath` is not needed for the system-wide method since `/usr/local/bin` is already on every user's PATH.
-
-Each user still has their own config at `~/.config/bbackup/config.yaml` and their own log at `~/.local/share/bbackup/bbackup.log`. Only the binary is shared.
+Each user still has their own config at `~/.config/bbackup/config.yaml` and
+their own log at `~/.local/share/bbackup/bbackup.log`. Only the command links
+are shared.
 
 ---
 
-## Manual virtual environment install (development / editable mode)
+## Development setup
 
-Use this if you want to edit the source code and have changes take effect immediately without reinstalling.
+Use this if you want to edit the source code and have changes take effect
+immediately.
 
 ```bash
-git clone https://github.com/cptnfren/best-backup.git
+git clone https://github.com/CruxExperts/best-backup.git
 cd best-backup
 
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+uv sync --locked
+uv run bbackup --version
+uv run bbman --version
 ```
 
-To make the commands available in every new shell without activating the venv each time:
+The project requires Python 3.12 or newer. The repo includes `.python-version`
+with `3.12`; uv will create `.venv` automatically when you run `uv sync --locked`.
+
+To run commands through the development environment:
 
 ```bash
-echo 'export PATH="$HOME/best-backup/.venv/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+uv run bbackup backup --help
+uv run bbman setup --help
 ```
 
 ---
 
-## Production install (stable, from local clone, no editable mode)
+## Production install from a local clone
 
 ```bash
-python3 -m venv ~/.venvs/bbackup
-source ~/.venvs/bbackup/bin/activate
-pip install /path/to/best-backup
+cd /path/to/best-backup
+uv tool install .
+```
+
+For an editable local tool install:
+
+```bash
+uv tool install --editable .
 ```
 
 ---
 
 ## Symlinks (no install, quick)
 
-If you want to run from the repo directory without `pip`:
+If you want to run from the repo directory without installing the package:
 
 ```bash
 chmod +x bbackup.py bbman.py
 
-sudo ln -s $(pwd)/bbackup.py /usr/local/bin/bbackup
-sudo ln -s $(pwd)/bbman.py /usr/local/bin/bbman
+sudo ln -s "$(pwd)/bbackup.py" /usr/local/bin/bbackup
+sudo ln -s "$(pwd)/bbman.py" /usr/local/bin/bbman
 ```
 
 For a user-only version without `sudo`:
 
 ```bash
 mkdir -p ~/bin
-ln -s $(pwd)/bbackup.py ~/bin/bbackup
-ln -s $(pwd)/bbman.py ~/bin/bbman
+ln -s "$(pwd)/bbackup.py" ~/bin/bbackup
+ln -s "$(pwd)/bbman.py" ~/bin/bbman
 
-# Add ~/bin to PATH if not already there
 export PATH="$HOME/bin:$PATH"
 ```
 
@@ -146,53 +146,18 @@ Add that export line to your shell profile to make it permanent.
 
 ---
 
-## Uninstall
-
-If installed via pipx (single user):
-
-```bash
-pipx uninstall bbackup
-```
-
-If installed via pipx (system-wide):
-
-```bash
-sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx uninstall bbackup
-```
-
-If installed into a manual venv:
-
-```bash
-source .venv/bin/activate
-pip uninstall bbackup
-# or remove the whole venv:
-rm -rf .venv
-```
-
-If installed via symlinks:
-
-```bash
-sudo rm /usr/local/bin/bbackup /usr/local/bin/bbman
-# or for user symlinks:
-rm ~/bin/bbackup ~/bin/bbman
-```
-
----
-
 ## Python version
 
-Python 3.10+ is required. Check with:
+Python 3.12+ is required. Check the project interpreter with:
 
 ```bash
-python3 --version
+uv run python --version
 ```
 
-If you have multiple Python versions and need to target a specific one:
+If you need uv to create the environment with a specific interpreter:
 
 ```bash
-python3.10 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+uv sync --locked --python 3.12
 ```
 
 ---
@@ -201,49 +166,42 @@ pip install -e .
 
 **`bbackup: command not found` after install**
 
-If you installed into a venv, make sure the venv is active (or its `bin/` directory is on your PATH):
+Make sure the uv tool bin directory is on your PATH:
 
 ```bash
-source .venv/bin/activate
-which bbackup   # should now resolve
+uv tool dir --bin
+uv tool update-shell
 ```
 
-Alternatively, add the venv bin dir to your shell profile permanently:
-
-```bash
-echo 'export PATH="$HOME/best-backup/.venv/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
+Open a new shell after updating the shell configuration.
 
 **Permission denied**
 
-Use a virtual environment (no sudo required):
+Use the single-user install unless you intentionally need system-wide commands:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+uv tool install git+https://github.com/CruxExperts/best-backup.git
 ```
 
 **`error: externally-managed-environment` on Ubuntu 22.04+ / Debian 12+**
 
-These distros block `pip install` on the system Python (PEP 668). The fix is `pipx`, which handles isolation automatically:
+Do not install into the system Python. Use uv tool installs or the UV-managed
+project environment:
 
 ```bash
-sudo apt install pipx && pipx ensurepath
-pipx install git+https://github.com/cptnfren/best-backup.git
+uv tool install git+https://github.com/CruxExperts/best-backup.git
+uv sync --locked
 ```
 
-Do not pass `--break-system-packages`; that flag bypasses OS safeguards and can corrupt tools that depend on the system Python.
+Do not pass `--break-system-packages`; that flag bypasses OS safeguards and can
+corrupt tools that depend on the system Python.
 
-**Packages fail to install**
+**Dependencies look stale**
 
-Make sure pip is up to date inside your venv:
+Refresh the project environment from the lockfile:
 
 ```bash
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -e .
+uv sync --locked
 ```
 
 ---
@@ -264,7 +222,7 @@ See [QUICKSTART.md](QUICKSTART.md) for what to do next.
 
 <p align="center">
 Slavic Kozyuk<br>
-&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/cptnfren/best-backup/blob/main/LICENSE">MIT License</a>
+&copy; 2026 <a href="https://www.cruxexperts.com/">Crux Experts LLC</a> &mdash; <a href="https://github.com/CruxExperts/best-backup/blob/main/LICENSE">MIT License</a>
 </p>
 
 <!-- project-footer:end -->

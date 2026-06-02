@@ -1,6 +1,6 @@
 """
 Entry point wrapper for bbman CLI.
-This allows bbman to be registered as a console script in setup.py.
+This allows bbman to be registered as a console script in pyproject.toml.
 """
 
 # Import and re-export the cli function

@@ -402,10 +402,11 @@ class TestDependencies:
         assert isinstance(installed, list)
         assert isinstance(missing, list)
 
-    def test_check_requirements_file_reads_packages(self):
-        from bbackup.management.dependencies import check_requirements_file
-        result = check_requirements_file()
+    def test_check_project_dependencies_reads_packages(self):
+        from bbackup.management.dependencies import check_project_dependencies
+        result = check_project_dependencies()
         assert isinstance(result, list)
+        assert "rich" in result
 
     def test_install_python_packages_success(self):
         from bbackup.management.dependencies import install_python_packages
@@ -436,7 +437,7 @@ class TestDependencies:
                    return_value=(False, ["rich", "click"], ["paramiko"])), \
              patch("bbackup.management.dependencies.check_system_dependencies",
                    return_value={"docker": (True, "ok")}), \
-             patch("bbackup.management.dependencies.check_requirements_file", return_value=[]), \
+             patch("bbackup.management.dependencies.check_project_dependencies", return_value=[]), \
              patch("bbackup.management.dependencies.install_python_packages", return_value=True), \
              patch("rich.prompt.Confirm.ask", return_value=True):
             result = check_and_install_dependencies(install_missing=True)
@@ -596,7 +597,7 @@ class TestUpdater:
         src_dir.mkdir()
         (src_dir / "bbackup").mkdir()
         (src_dir / "bbackup" / "cli.py").write_text("# cli")
-        (src_dir / "setup.py").write_text("# setup")
+        (src_dir / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
         backup = tmp_path / "backup"
         result = backup_repository(src_dir, backup)
