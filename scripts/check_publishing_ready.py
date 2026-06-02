@@ -31,13 +31,11 @@ EXPECTED_ACTIONS = {
     ".github/workflows/ci.yml": [
         "actions/checkout@v6",
         "actions/setup-python@v6",
-        "astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b",
         "actions/upload-artifact@v7",
     ],
     ".github/workflows/release-notes.yml": [
         "actions/checkout@v6",
         "actions/setup-python@v6",
-        "astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b",
         "softprops/action-gh-release@v3",
     ],
     ".github/workflows/stale.yml": [
@@ -158,6 +156,8 @@ def main() -> int:
         errors.append(".github/workflows/ci.yml must test Python 3.12 and 3.13 only")
     if "uv sync --locked" not in ci_workflow or "uv run pytest" not in ci_workflow:
         errors.append(".github/workflows/ci.yml must install and test through uv")
+    if "python -m pip install uv" not in ci_workflow:
+        errors.append(".github/workflows/ci.yml must install uv without disallowed third-party actions")
     for target in PY_COMPILE_TARGETS:
         if target not in ci_workflow:
             errors.append(f".github/workflows/ci.yml py_compile step is missing {target}")
