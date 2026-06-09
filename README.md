@@ -6,11 +6,13 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.7.0-6366f1?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.8.0-6366f1?style=flat-square)](CHANGELOG.md)
 
 [Quick start](#quick-start) · [Filesystem backup](#filesystem-backup) · [Agent integration](#agent-integration) · [CLI reference](#cli-reference) · [Docs](#documentation)
 
 </div>
+
+![bbackup backup pipeline showing Docker, filesystem, database, encryption, verification, and remote storage destinations](docs/assets/bbackup-hero.png)
 
 ---
 
@@ -22,11 +24,32 @@ uv tool install git+https://github.com/CruxExperts/best-backup.git
 
 ---
 
-## What it does
+## Why bbackup
 
-Run `bbackup backup` and you get an interactive container picker, a live BTOP-style dashboard while the backup runs, and a finished archive that can be encrypted and shipped to Google Drive, SFTP, or a local path. Point it at `/srv/data` and it backs that up too, with gitignore-style excludes. The companion `bbman` command handles setup, health checks, dependency installs, and self-updates so day-to-day maintenance stays out of the way.
+Run `bbackup backup` and you get an interactive container picker, a live BTOP-style dashboard while the backup runs, and a finished artifact that can be verified, encrypted, and shipped to Google Drive, SFTP, or a local path. Point it at `/srv/data` and it backs that up too, with gitignore-style excludes. The companion `bbman` command handles setup, health checks, dependency installs, and self-updates so day-to-day maintenance stays out of the way.
 
 Every command speaks structured JSON, making it compatible with AI agents out of the box: set two env vars, run `bbackup skills`, and drive the entire tool with `--input-json`.
+
+> [!TIP]
+> Use `--dry-run --output json` before destructive restore work or scheduled backup changes. The JSON plan is designed for both humans and automation.
+
+## Backup flow
+
+```mermaid
+flowchart LR
+    docker[Docker containers<br/>volumes • configs • networks]
+    fs[Host filesystems<br/>paths • excludes]
+    manifest[backup_manifest.json<br/>sizes • SHA-256 • item results]
+    encrypt[Encryption<br/>AES-256-GCM or RSA-4096]
+    upload[Remote upload<br/>local • SFTP • rclone]
+    restore[Restore preflight<br/>manifest verification]
+
+    docker --> manifest
+    fs --> manifest
+    manifest --> encrypt
+    encrypt --> upload
+    manifest --> restore
+```
 
 ---
 
@@ -310,7 +333,7 @@ Level-0 JSON output:
 ```json
 {
   "cli": "bbackup",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "agent_hint": "Set BBACKUP_OUTPUT=json and BBACKUP_NO_INTERACTIVE=1 for fully non-interactive use.",
   "skills": [
     {"id": "docker-backup",     "summary": "Back up Docker containers, volumes, networks, and configs.", "common": true},

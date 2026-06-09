@@ -14,6 +14,7 @@
 | [cli-skills.md](cli-skills.md) | CLI skills catalog for all core `bbackup` and `bbman` commands |
 | [VERSIONING.md](VERSIONING.md) | Release version source of truth, hook setup, and validation commands |
 | [PUBLISHING_CHECKLIST.md](PUBLISHING_CHECKLIST.md) | GitHub publishing and release readiness checklist |
+| [assets/README.md](assets/README.md) | Documentation image inventory and visual standards |
 | [prompts/bootstrap-planning-agent.md](prompts/bootstrap-planning-agent.md) | Planning handoff for Codex-maintenance work |
 
 ---

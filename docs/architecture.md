@@ -21,6 +21,19 @@
 
 ---
 
+## Documentation visuals
+
+GitHub-facing documentation uses Markdown-native visuals wherever possible:
+
+- Use Mermaid fenced code blocks for flow charts and release/readiness diagrams so charts render directly in GitHub pull requests, releases, and Markdown files.
+- Keep each diagram self-describing with clear node labels and avoid depending on color alone.
+- Store bitmap assets under `docs/assets/` and reference them with relative paths plus specific alt text.
+- Keep generated images free of embedded text so README headings, captions, and links remain searchable and accessible.
+
+The README hero image is a bitmap overview of the backup pipeline. The canonical system flow remains the Mermaid diagram in `README.md`, because it is reviewable in diffs and easier to update when behavior changes.
+
+---
+
 ## Backup strategy
 
 The tool uses two separate mechanisms depending on what it is backing up.
@@ -215,6 +228,26 @@ For remotes with `type: rclone`, you can tune transfer concurrency so uploads us
 ## BackupStatus data flow
 
 `BackupStatus` is the shared state object between the backup worker thread and the TUI render thread. The worker calls `status.update()`, `status.add_error()`, and updates per-item dicts. The TUI reads these on every render cycle (4 fps). A `threading.Lock` protects all writes.
+
+---
+
+## Release readiness flow
+
+```mermaid
+flowchart LR
+    version[VERSION<br/>single source of truth]
+    sync[Version sync check<br/>package • README • CLI docs]
+    build[Build artifacts<br/>wheel • sdist]
+    smoke[Installed smoke test<br/>CLI entry points]
+    tests[Test suite<br/>pytest • py_compile]
+    publish[GitHub release prep<br/>PR • tag after CI]
+
+    version --> sync
+    sync --> build
+    build --> smoke
+    smoke --> tests
+    tests --> publish
+```
 
 ---
 

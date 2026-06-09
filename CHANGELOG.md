@@ -12,6 +12,33 @@ current uv-based install, development, and release instructions.
 
 ---
 
+## [1.8.0] - 2026-06-09
+
+### Added
+
+- `backup_manifest.json` generation for non-cancelled backups, including schema version, source scope, filesystem source paths, volume artifacts, item results, errors, file sizes, and SHA-256 hashes.
+- Restore-time manifest verification that fails before mutation when files are missing, changed, unlisted, or outside the backup root.
+- Temp-to-final promotion for local, SFTP, rclone, and solid-archive writes so partial uploads are not exposed as completed backups.
+- GitHub-facing documentation graphics and Mermaid diagrams for the backup pipeline and release/readiness flow.
+
+### Changed
+
+- Successful encrypted backups now remove plaintext staging and report encryption based on actual output state.
+- Rclone remote listing now uses top-level `lsf` output so retention targets backup directories and archive files instead of individual nested files.
+- Existing Docker volume restore uses a staging-volume copy preflight before removing the original volume.
+- Direct `--paths` and configured filesystem sets now reject duplicate target names that would overwrite each other.
+- `init-encryption` now rejects unsupported generated-key passwords before creating key directories.
+- Generated asymmetric keys are RSA-4096 only; ECDSA is no longer advertised as a backup encryption option.
+
+### Fixed
+
+- Docker volume backup and restore now propagate failed `docker cp` return codes.
+- Failed Docker volume backup attempts remove incomplete local volume artifacts.
+- Solid archive failures preserve an existing final archive and remove partial files.
+- Partial backup JSON no longer reports encrypted output when encryption was skipped due to item failures.
+
+---
+
 ## [1.7.0] - 2026-03-06
 
 ### Added
@@ -193,7 +220,8 @@ current uv-based install, development, and release instructions.
 
 ---
 
-[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/CruxExperts/best-backup/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/CruxExperts/best-backup/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/CruxExperts/best-backup/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/CruxExperts/best-backup/compare/v1.4.0...v1.5.0
