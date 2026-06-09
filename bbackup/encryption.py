@@ -667,7 +667,7 @@ class EncryptionManager:
         Generate asymmetric keypair.
         
         Args:
-            algorithm: 'rsa-4096' or 'ecdsa-p384'
+            algorithm: 'rsa-4096'
         
         Returns:
             Tuple of (public_key_bytes, private_key_bytes) in PEM format
@@ -676,12 +676,6 @@ class EncryptionManager:
             private_key = rsa.generate_private_key(
                 public_exponent=65537,
                 key_size=4096,
-                backend=default_backend()
-            )
-        elif algorithm == 'ecdsa-p384':
-            from cryptography.hazmat.primitives.asymmetric import ec
-            private_key = ec.generate_private_key(
-                ec.SECP384R1(),
                 backend=default_backend()
             )
         else:

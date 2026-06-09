@@ -134,7 +134,7 @@ encryption:
     # Use either key_file (local) or key_url (remote)
     key_file: ~/.config/bbackup/encryption.key
     # OR use URL: key_url: https://raw.githubusercontent.com/user/repo/backup.key
-    key_password: null  # Optional password for key file encryption
+    key_password: null  # Advanced: derive key from password using key_file bytes as salt
     algorithm: aes-256-gcm
   asymmetric:
     # Public key can be file path OR URL (auto-detected)
@@ -144,7 +144,7 @@ encryption:
     private_key: ~/.config/bbackup/backup_private.pem
     # Private key should always be local file (never URL for security)
     private_key_password: null  # Optional password for private key
-    algorithm: rsa-4096  # rsa-4096, ecdsa-p384
+    algorithm: rsa-4096
     verify_key_signature: false  # If true, verify key hasn't been tampered with
   encrypt_volumes: true
   encrypt_configs: true

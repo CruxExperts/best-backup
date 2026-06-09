@@ -270,6 +270,21 @@ class TestConfigLoad:
         cfg = Config(config_path=None)
         assert cfg.solid_archive is False
 
+    def test_duplicate_filesystem_target_names_raise(self, tmp_path):
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(textwrap.dedent("""
+            filesystem:
+              local:
+                targets:
+                  - name: data
+                    path: /srv/data
+                  - name: data
+                    path: /opt/data
+        """))
+
+        with pytest.raises(ValueError, match="Duplicate filesystem target name"):
+            Config(config_path=str(cfg_file))
+
     def test_get_backup_compression_returns_dict_with_defaults(self):
         cfg = Config(config_path=None)
         comp = cfg.get_backup_compression()

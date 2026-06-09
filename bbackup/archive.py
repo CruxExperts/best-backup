@@ -7,6 +7,7 @@ Last Updated: 2026-03-04
 """
 
 import gzip
+import os
 import tarfile
 import tempfile
 from pathlib import Path
@@ -78,41 +79,49 @@ def create_solid_archive(
     level = int(compression_config.get("level", 6))
     ext = _compression_ext(fmt)
     archive_path = backup_dir.parent / f"{backup_dir.name}.tar.{ext}"
-    created_path: Optional[Path] = None
+    partial_archive_path = archive_path.with_name(f"{archive_path.name}.partial")
+    partial_enc_path: Optional[Path] = None
 
     try:
+        if partial_archive_path.exists():
+            partial_archive_path.unlink()
         if fmt == "gzip" and level != 9:
             # Use gzip level (Gap 6)
-            with open(archive_path, "wb") as f:
+            with open(partial_archive_path, "wb") as f:
                 with gzip.GzipFile(fileobj=f, mode="wb", compresslevel=level) as gz:
                     with tarfile.open(fileobj=gz, mode="w") as tar:
                         tar.add(backup_dir, arcname=backup_dir.name)
         else:
             # tarfile built-in compression (level not configurable for bz2/xz in same way)
             mode = _tar_mode(fmt)
-            with tarfile.open(archive_path, mode) as tar:
+            with tarfile.open(partial_archive_path, mode) as tar:
                 tar.add(backup_dir, arcname=backup_dir.name)
-
-        created_path = archive_path
 
         if encryption_config is not None and getattr(encryption_config, "enabled", False):
             enc_path = archive_path.with_suffix(archive_path.suffix + ".enc")
+            partial_enc_path = enc_path.with_name(f"{enc_path.name}.partial")
+            if partial_enc_path.exists():
+                partial_enc_path.unlink()
             mgr = EncryptionManager(encryption_config)
-            if not mgr.encrypt_file(archive_path, enc_path):
+            if not mgr.encrypt_file(partial_archive_path, partial_enc_path):
                 raise OSError("Encryption of archive failed")
             try:
-                archive_path.unlink()
+                partial_archive_path.unlink()
             except OSError as e:
                 logger.warning(f"Could not remove intermediate archive after encrypt: {e}")
+            os.replace(partial_enc_path, enc_path)
             archive_path = enc_path
+        else:
+            os.replace(partial_archive_path, archive_path)
 
         return archive_path
     except Exception:
-        if created_path is not None and created_path.exists():
-            try:
-                created_path.unlink()
-            except OSError:
-                pass
+        for path in (partial_archive_path, partial_enc_path):
+            if path is not None and path.exists():
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
         raise
 
 

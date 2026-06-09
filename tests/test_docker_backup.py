@@ -256,6 +256,25 @@ class TestBackupVolumeRsync:
         result = db.backup_volume("myvolume", tmp_path)
         assert result is True
 
+    def test_rsync_docker_cp_failure_returns_false(self, mock_docker_client, mock_subprocess, tmp_path):
+        mock_run, _ = mock_subprocess
+        mock_docker_client.volumes.get.return_value = MagicMock()
+        temp_container = MagicMock()
+        mock_docker_client.containers.run.return_value = temp_container
+
+        def run_side_effect(cmd, **kwargs):
+            result = MagicMock(returncode=0, stdout="", stderr="")
+            if cmd[:2] == ["docker", "cp"]:
+                result.returncode = 1
+                result.stderr = "copy failed"
+            return result
+
+        mock_run.side_effect = run_side_effect
+
+        db = make_backup(mock_docker_client)
+        assert db.backup_volume("myvolume", tmp_path) is False
+        assert not (tmp_path / "volumes" / "myvolume").exists()
+
     def test_volume_not_found_returns_false(self, mock_docker_client, tmp_path):
         from docker.errors import APIError
         mock_docker_client.volumes.get.side_effect = APIError("not found")

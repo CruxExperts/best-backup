@@ -716,7 +716,7 @@ _register_bbackup(
                 name="password",
                 kind="flag",
                 type="string",
-                description="Password for key encryption (optional).",
+                description="Not currently supported for generated keys; command fails if provided.",
                 cli_flag="--password",
                 json_key="password",
             ),
@@ -727,7 +727,7 @@ _register_bbackup(
                 description="Algorithm for asymmetric keys.",
                 cli_flag="--algorithm",
                 json_key="algorithm",
-                allowed_values=["rsa-4096", "ecdsa-p384"],
+                allowed_values=["rsa-4096"],
                 shape="enum",
                 default="rsa-4096",
             ),
@@ -1508,4 +1508,3 @@ def get_command(cli: CliName, name: str) -> Optional[CliCommand]:
     """Lookup a command by cli + name. Returns None if unknown."""
     registry = get_command_registry(cli)
     return registry.get(f"{cli}:{name}")
-

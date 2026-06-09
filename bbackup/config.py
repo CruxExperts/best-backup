@@ -242,6 +242,7 @@ class Config:
                 )
                 for t in set_data.get("targets", [])
             ]
+            self._validate_unique_filesystem_target_names(targets)
             self.filesystem_sets[set_name] = FilesystemBackupSet(
                 name=set_name,
                 description=set_data.get("description", ""),
@@ -313,7 +314,7 @@ class Config:
                 use_link_dest=inc.get("use_link_dest", True),
                 min_file_size=inc.get("min_file_size", 1048576),
             )
-        
+
         # Parse encryption settings
         if "encryption" in self.data:
             enc = self.data["encryption"]
@@ -326,6 +327,14 @@ class Config:
                 encrypt_configs=enc.get("encrypt_configs", True),
                 encrypt_networks=enc.get("encrypt_networks", True),
             )
+
+    def _validate_unique_filesystem_target_names(self, targets: List[FilesystemTarget]) -> None:
+        """Reject duplicate filesystem target names that would overwrite each other."""
+        seen = set()
+        for target in targets:
+            if target.name in seen:
+                raise ValueError(f"Duplicate filesystem target name: {target.name}")
+            seen.add(target.name)
     
     def get_staging_dir(self) -> str:
         """Get local staging directory."""

@@ -5,6 +5,7 @@ Created: 2026-02-26
 Last Updated: 2026-02-26
 """
 
+import json
 import threading
 from unittest.mock import MagicMock, patch
 
@@ -71,6 +72,36 @@ class TestRunBackupLifecycle:
         scope = BackupScope(containers=False, volumes=False, networks=False, configs=False)
         runner.run_backup(tmp_path, scope=scope)
         assert runner.status.status == "completed"
+
+    def test_item_failure_sets_partial_status(self, mock_docker_client, tmp_path):
+        runner = make_runner(mock_docker_client, tmp_path)
+        runner._mock_db.get_all_volumes.return_value = [{"name": "mydata"}]
+        runner._mock_db.backup_volume.return_value = False
+        scope = BackupScope(containers=False, volumes=True, networks=False, configs=False)
+
+        result = runner.run_backup(tmp_path, scope=scope)
+
+        assert result["volumes"]["mydata"] == "failed"
+        assert result["errors"] == ["Failed to backup volume: mydata"]
+        assert runner.status.status == "partial"
+        manifest = json.loads((tmp_path / "backup_manifest.json").read_text())
+        assert manifest["status"] == "partial"
+        assert manifest["item_results"]["volumes"]["mydata"] == "failed"
+        assert manifest["errors"] == ["Failed to backup volume: mydata"]
+
+    def test_run_backup_writes_manifest(self, mock_docker_client, tmp_path):
+        runner = make_runner(mock_docker_client, tmp_path)
+        scope = BackupScope(containers=False, volumes=False, networks=False, configs=False)
+
+        runner.run_backup(tmp_path, scope=scope)
+
+        manifest_file = tmp_path / "backup_manifest.json"
+        assert manifest_file.exists()
+        manifest = json.loads(manifest_file.read_text())
+        assert manifest["schema_version"] == 1
+        assert manifest["backup_name"] == tmp_path.name
+        assert manifest["status"] == "complete"
+        assert manifest["source_scope"]["volumes"] is False
 
     def test_start_called_before_work(self, mock_docker_client, tmp_path):
         runner = make_runner(mock_docker_client, tmp_path)
@@ -364,15 +395,36 @@ class TestEncryptBackupDirectory:
         assert result == encrypted
         assert runner.status.encryption_status == "encrypted"
 
-    def test_encryption_exception_returns_original(self, mock_docker_client, tmp_path):
+    def test_encryption_exception_raises(self, mock_docker_client, tmp_path):
         runner = make_runner(mock_docker_client, tmp_path)
         runner.config.encryption.enabled = True
 
         with patch("bbackup.backup_runner.EncryptionManager", side_effect=RuntimeError("key error")):
-            result = runner.encrypt_backup_directory(tmp_path)
+            try:
+                runner.encrypt_backup_directory(tmp_path)
+            except RuntimeError as exc:
+                assert "Encryption failed" in str(exc)
+            else:
+                raise AssertionError("encryption failure did not raise")
 
-        assert result == tmp_path
         assert len(runner.status.errors) >= 1
+
+    def test_encryption_same_path_raises(self, mock_docker_client, tmp_path):
+        runner = make_runner(mock_docker_client, tmp_path)
+        runner.config.encryption.enabled = True
+
+        with patch("bbackup.backup_runner.EncryptionManager") as MockEM:
+            instance = MagicMock()
+            instance.encrypt_backup.return_value = tmp_path
+            MockEM.return_value = instance
+            try:
+                runner.encrypt_backup_directory(tmp_path)
+            except RuntimeError as exc:
+                assert "Encryption failed" in str(exc)
+            else:
+                raise AssertionError("same-path encryption failure did not raise")
+
+        assert runner.status.encryption_status == "failed"
 
 
 # ---------------------------------------------------------------------------

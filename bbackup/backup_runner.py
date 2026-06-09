@@ -13,6 +13,7 @@ from .rotation import BackupRotation
 from .tui import BackupStatus
 from .logging import get_logger
 from .encryption import EncryptionManager
+from .manifest import generate_backup_manifest
 
 logger = get_logger('backup_runner')
 
@@ -267,8 +268,26 @@ class BackupRunner:
 
         if self.status.status == "cancelled":
             self.status.status = "cancelled"
+        elif results["errors"]:
+            self.status.status = "partial"
         else:
             self.status.status = "completed"
+
+        if self.status.status != "cancelled":
+            encryption_mode = self.config.encryption.method if self.config.encryption.enabled else "disabled"
+            generate_backup_manifest(
+                backup_dir,
+                scope,
+                filesystem_targets=fs_targets,
+                encryption_mode=encryption_mode,
+                item_results={
+                    "containers": results["containers"],
+                    "volumes": results["volumes"],
+                    "networks": results["networks"],
+                    "filesystems": results["filesystems"],
+                },
+                errors=results["errors"],
+            )
 
         # TODO: call self.docker_backup.create_metadata_archive(backup_dir) here
         # to produce a compressed tar of configs/networks metadata.
@@ -331,7 +350,10 @@ class BackupRunner:
             backup_dir: Backup directory to encrypt
         
         Returns:
-            Path to encrypted backup directory (or original if encryption disabled/failed)
+            Path to encrypted backup directory, or original if encryption is disabled.
+
+        Raises:
+            RuntimeError: If encryption is enabled but encryption fails.
         """
         if not self.config.encryption.enabled:
             return backup_dir
@@ -350,15 +372,17 @@ class BackupRunner:
                 self.status.encryption_status = "encrypted"
                 return encrypted_dir
             else:
-                logger.warning("Encryption failed, using unencrypted backup")
-                self.status.add_warning("Encryption failed, backup is unencrypted")
                 self.status.encryption_status = "failed"
-                return backup_dir
+                message = "Encryption failed"
+                self.status.add_error(message)
+                raise RuntimeError(message)
         except Exception as e:
             logger.error(f"Encryption error: {e}")
-            self.status.add_error(f"Encryption failed: {e}")
+            message = f"Encryption failed: {e}"
+            if message not in self.status.errors:
+                self.status.add_error(message)
             self.status.encryption_status = "failed"
-            return backup_dir  # Return original on error
+            raise RuntimeError(message) from e
     
     def upload_to_remotes(
         self,

@@ -26,7 +26,7 @@ from .tui import BackupTUI, BackupStatus
 from .remote import RemoteStorageManager
 from .archive import create_solid_archive
 from .backup_runner import BackupRunner
-from .restore import DockerRestore
+from .restore import DockerRestore, list_volume_backup_names
 from .logging import setup_logging
 from .encryption import EncryptionManager
 from .resources import read_text_resource, resource_exists
@@ -49,6 +49,24 @@ from .skills import get_skill
 
 SKILLS_DOC_RESOURCE = "cli-skills.md"
 SKILLS_INDEX_RESOURCE = "cli-skills-index.json"
+
+
+def _find_duplicate_filesystem_target_names(targets: List[FilesystemTarget]) -> List[str]:
+    seen = set()
+    duplicates = []
+    for target in targets:
+        if target.name in seen and target.name not in duplicates:
+            duplicates.append(target.name)
+        seen.add(target.name)
+    return duplicates
+
+
+def _backup_encryption_result(status: BackupStatus, backup_path: Path) -> str:
+    if status.encryption_status == "encrypted" or str(backup_path).endswith(".enc"):
+        return "encrypted"
+    if status.encryption_status == "failed":
+        return "failed"
+    return "disabled"
 
 
 @click.group()
@@ -228,6 +246,13 @@ def backup(
         for fs_set_obj in config.filesystem_sets.values():
             filesystem_targets.extend(t for t in fs_set_obj.targets if t.enabled)
 
+    duplicate_target_names = _find_duplicate_filesystem_target_names(filesystem_targets)
+    if duplicate_target_names:
+        msg = f"Duplicate filesystem target name: {', '.join(duplicate_target_names)}"
+        if output != "json":
+            sys.stderr.write(f"Error: {msg}\n")
+        json_error("backup", msg, EXIT_USER_ERROR, output)
+
     # Gap 9: dry-run support
     if dry_run:
         plan = {
@@ -279,6 +304,12 @@ def backup(
                 filesystem_targets=filesystem_targets,
             ) or {}
 
+            run_errors = run_results.get("errors") if isinstance(run_results, dict) else []
+            if status.status in ("partial", "error") or run_errors:
+                if status.status != "error":
+                    status.status = "partial"
+                return
+
             if use_solid_archive and status.status != "cancelled":
                 status.update(action="Creating archive...", item="")
                 compression_cfg = config.get_backup_compression()
@@ -287,6 +318,10 @@ def backup(
                     status.update(action="Encrypting archive...", item="")
                 upload_path = create_solid_archive(backup_dir, compression_cfg, enc_cfg)
                 backup_name = upload_path.name
+                if enc_cfg and str(upload_path).endswith(".enc"):
+                    status.encryption_status = "encrypted"
+                    if original_backup_dir.exists():
+                        shutil.rmtree(original_backup_dir)
                 if remotes_to_use:
                     runner.upload_to_remotes(upload_path, backup_name, remotes_to_use)
                 any_ok = any(st == "success" for st in (status.remote_status or {}).values())
@@ -305,15 +340,19 @@ def backup(
                     if encrypted_backup_dir != original_backup_dir:
                         backup_dir = encrypted_backup_dir
                         backup_name = encrypted_backup_dir.name
+                        if original_backup_dir.exists():
+                            shutil.rmtree(original_backup_dir)
 
                 if remotes_to_use and status.status != "cancelled":
                     runner.upload_to_remotes(backup_dir, backup_name, remotes_to_use)
 
-            if status.status != "cancelled":
+            if status.status not in ("cancelled", "partial", "error"):
                 status.status = "completed"
         except Exception as e:
-            status.status = "error"
-            status.add_error(str(e))
+            if status.status != "partial":
+                status.status = "error"
+            if str(e) not in status.errors:
+                status.add_error(str(e))
 
     try:
         if use_tui:
@@ -335,8 +374,8 @@ def backup(
         "volumes": status.volumes_status or {},
         "networks": status.networks_status or {},
         "filesystems": status.filesystems_status or {},
-        "remotes": {r.name: "uploaded" for r in remotes_to_use if hasattr(r, "name")},
-        "encryption": "encrypted" if config.encryption.enabled else "disabled",
+        "remotes": status.remote_status or {},
+        "encryption": _backup_encryption_result(status, backup_dir),
         "errors": status.errors or [],
     }
 
@@ -440,7 +479,7 @@ def restore(
         if configs_dir.exists():
             containers_to_restore = [f.stem.replace("_config", "") for f in configs_dir.glob("*_config.json")]
         if volumes_dir.exists():
-            volumes_to_restore = [d.name for d in volumes_dir.iterdir() if d.is_dir()]
+            volumes_to_restore = list_volume_backup_names(backup_path)
         if networks_dir.exists():
             networks_to_restore = [f.stem for f in networks_dir.glob("*.json")]
     else:
@@ -835,8 +874,8 @@ def init_config(ctx, skills, output, input_json):
 @click.option("--method", type=click.Choice(["symmetric", "asymmetric", "both"]),
               default="symmetric", help="Encryption method to use")
 @click.option("--key-path", type=click.Path(), help="Directory to save key(s) (default: ~/.config/bbackup/)")
-@click.option("--password", help="Password for key encryption (optional)")
-@click.option("--algorithm", type=click.Choice(["rsa-4096", "ecdsa-p384"]), default="rsa-4096",
+@click.option("--password", help="Password for key encryption (not currently supported)")
+@click.option("--algorithm", type=click.Choice(["rsa-4096"]), default="rsa-4096",
               help="Algorithm for asymmetric keys")
 @click.option("--upload-github", is_flag=True, help="Remind about uploading public key to GitHub")
 @click.option(
@@ -854,6 +893,14 @@ def init_encryption(ctx, method, key_path, password, algorithm, upload_github, s
     merge_json_input(ctx, input_json)
 
     console: Console = ctx.obj["console"]
+
+    if password:
+        json_error(
+            "init-encryption",
+            "--password is not currently supported for generated keys",
+            EXIT_USER_ERROR,
+            output,
+        )
 
     key_dir = Path(key_path).expanduser() if key_path else Path.home() / ".config" / "bbackup"
     key_dir.mkdir(parents=True, exist_ok=True)

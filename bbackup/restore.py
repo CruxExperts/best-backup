@@ -7,6 +7,8 @@ import json
 import os
 import shutil
 import subprocess
+import tarfile
+import tempfile
 from pathlib import Path
 from typing import List, Dict, Optional
 from datetime import datetime
@@ -17,8 +19,37 @@ from .archive import is_solid_archive_name, strip_solid_archive_suffix, unpack_s
 from .config import Config
 from .logging import get_logger
 from .encryption import EncryptionManager
+from .manifest import verify_backup_manifest
 
 logger = get_logger('restore')
+
+
+VOLUME_ARCHIVE_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz")
+
+
+def _strip_volume_archive_suffix(filename: str) -> Optional[str]:
+    for suffix in VOLUME_ARCHIVE_SUFFIXES:
+        if filename.endswith(suffix):
+            return filename[:-len(suffix)]
+    return None
+
+
+def list_volume_backup_names(backup_path: Path) -> List[str]:
+    """List volume backup names stored as directories or supported tar archives."""
+    volumes_dir = Path(backup_path) / "volumes"
+    if not volumes_dir.exists():
+        return []
+
+    names = set()
+    for item in volumes_dir.iterdir():
+        if item.is_dir():
+            names.add(item.name)
+            continue
+        if item.is_file():
+            archive_name = _strip_volume_archive_suffix(item.name)
+            if archive_name:
+                names.add(archive_name)
+    return sorted(names)
 
 
 class DockerRestore:
@@ -149,63 +180,122 @@ class DockerRestore:
     
     def restore_volume(self, volume_name: str, backup_path: Path, new_name: Optional[str] = None) -> bool:
         """Restore Docker volume from backup."""
+        temp_extract_dir: Optional[Path] = None
         try:
             volume_backup_dir = backup_path / "volumes" / volume_name
+            if not volume_backup_dir.exists():
+                archive_path = self._find_volume_archive(backup_path, volume_name)
+                if archive_path is None:
+                    return False
+                temp_extract_dir = Path(tempfile.mkdtemp(prefix=f"bbackup_volume_{volume_name}_"))
+                with tarfile.open(archive_path, self._tar_read_mode(archive_path)) as tar:
+                    tar.extractall(temp_extract_dir, filter="data")
+                extracted_volume_dir = temp_extract_dir / volume_name
+                volume_backup_dir = extracted_volume_dir if extracted_volume_dir.exists() else temp_extract_dir
+
             if not volume_backup_dir.exists():
                 return False
             
             target_volume_name = new_name or volume_name
-            
-            # Remove existing volume if it exists
+
+            existing_volume = None
             try:
                 existing_volume = self.client.volumes.get(target_volume_name)
-                existing_volume.remove()
             except APIError:
                 pass  # Volume doesn't exist
-            
-            # Create new volume
-            self.client.volumes.create(name=target_volume_name)
-            
-            # Use temporary container to restore volume data
-            temp_container_name = f"bbackup_restore_{target_volume_name}_{os.getpid()}"
-            
-            try:
-                # Create temporary container with volume mounted
-                temp_container = self.client.containers.run(
-                    "alpine:latest",
-                    command="sleep 3600",
-                    name=temp_container_name,
-                    volumes={target_volume_name: {"bind": "/volume_data", "mode": "rw"}},
-                    detach=True,
-                    remove=False,
-                )
-                
-                import time
-                time.sleep(1)
-                
-                # Copy backup data to container
-                subprocess.run(
-                    ["docker", "cp", str(volume_backup_dir) + "/.", f"{temp_container_name}:/volume_data/"],
-                    check=False,
-                )
-                
-                # Cleanup
-                temp_container.stop()
-                temp_container.remove()
-                
-                return True
-            except Exception:
-                # Cleanup on error
+
+            staging_volume = None
+            staging_volume_name = f"bbackup_restore_stage_{target_volume_name}_{os.getpid()}"
+            if existing_volume is not None:
+                staging_volume = self.client.volumes.create(name=staging_volume_name)
+                if not self._copy_backup_dir_to_volume(volume_backup_dir, staging_volume_name, volume_name):
+                    try:
+                        staging_volume.remove()
+                    except Exception:
+                        pass
+                    return False
                 try:
-                    temp_container = self.client.containers.get(temp_container_name)
-                    temp_container.stop()
-                    temp_container.remove()
+                    staging_volume.remove()
                 except Exception:
                     pass
-                return False
+                existing_volume.remove()
+
+            self.client.volumes.create(name=target_volume_name)
+            return self._copy_backup_dir_to_volume(volume_backup_dir, target_volume_name, volume_name)
                 
         except APIError:
             return False
+        except (tarfile.TarError, OSError) as e:
+            logger.error(f"Failed to read volume archive for {volume_name}: {e}")
+            return False
+        finally:
+            if temp_extract_dir is not None and temp_extract_dir.exists():
+                try:
+                    shutil.rmtree(temp_extract_dir)
+                except OSError:
+                    pass
+
+    def _copy_backup_dir_to_volume(
+        self,
+        volume_backup_dir: Path,
+        target_volume_name: str,
+        source_volume_name: str,
+    ) -> bool:
+        """Copy backup data into a Docker volume through a temporary container."""
+        temp_container_name = f"bbackup_restore_{target_volume_name}_{os.getpid()}"
+        try:
+            temp_container = self.client.containers.run(
+                "alpine:latest",
+                command="sleep 3600",
+                name=temp_container_name,
+                volumes={target_volume_name: {"bind": "/volume_data", "mode": "rw"}},
+                detach=True,
+                remove=False,
+            )
+
+            import time
+            time.sleep(1)
+
+            copy_result = subprocess.run(
+                ["docker", "cp", str(volume_backup_dir) + "/.", f"{temp_container_name}:/volume_data/"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            temp_container.stop()
+            temp_container.remove()
+
+            if copy_result.returncode != 0:
+                logger.error(
+                    f"docker cp restore failed for volume {source_volume_name}: {copy_result.stderr.strip()}"
+                )
+                return False
+
+            return True
+        except Exception:
+            try:
+                temp_container = self.client.containers.get(temp_container_name)
+                temp_container.stop()
+                temp_container.remove()
+            except Exception:
+                pass
+            return False
+
+    def _find_volume_archive(self, backup_path: Path, volume_name: str) -> Optional[Path]:
+        volumes_dir = backup_path / "volumes"
+        for suffix in VOLUME_ARCHIVE_SUFFIXES:
+            archive_path = volumes_dir / f"{volume_name}{suffix}"
+            if archive_path.exists():
+                return archive_path
+        return None
+
+    def _tar_read_mode(self, archive_path: Path) -> str:
+        if archive_path.name.endswith(".tar.bz2"):
+            return "r:bz2"
+        if archive_path.name.endswith(".tar.xz"):
+            return "r:xz"
+        return "r:gz"
     
     def restore_network(self, network_name: str, backup_path: Path, new_name: Optional[str] = None) -> bool:
         """Restore network configuration."""
@@ -344,6 +434,16 @@ class DockerRestore:
         try:
             # Decrypt backup dir if encrypted (per-file; no-op for unpacked solid archive)
             backup_path = self.decrypt_backup_directory(backup_path)
+
+            manifest_errors = verify_backup_manifest(backup_path)
+            if manifest_errors:
+                return {
+                    "containers": {},
+                    "volumes": {},
+                    "networks": {},
+                    "filesystems": {},
+                    "errors": manifest_errors,
+                }
 
             rename_map = rename_map or {}
 

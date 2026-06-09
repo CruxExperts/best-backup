@@ -128,6 +128,14 @@ See [QUICKSTART.md](QUICKSTART.md) for a full walk-through: config, remote stora
 
 ---
 
+## Integrity And Upload Safety
+
+Each non-cancelled backup writes `backup_manifest.json` with the requested scope, filesystem source paths, volume artifact names, item results, errors, file sizes, and SHA-256 hashes. Restore verifies the manifest when present and fails before mutation if files are missing, changed, unlisted, or outside the backup root.
+
+Local, SFTP, and rclone uploads write to `.partial` destinations first and promote to the final backup name only after the copy succeeds. When encryption succeeds, plaintext staging is removed so local backup artifacts match the encrypted output.
+
+---
+
 ## Configuration
 
 bbackup checks these locations in order:
@@ -485,10 +493,11 @@ best-backup/
 - [x] Management wrapper (`bbman`)
 - [x] GitHub key integration for public key distribution
 - [x] AI agent JSON I/O, skill discovery, `--dry-run`, and `--input-json` on all commands
+- [x] Backup manifest verification with SHA-256 hashes
+- [x] Temp-to-final upload promotion for local, SFTP, and rclone remotes
 
 **Planned**
 
-- [ ] Backup verification and checksums
 - [ ] Email and webhook notifications
 - [ ] Cron-based scheduling integration
 - [ ] Multi-server backup coordination

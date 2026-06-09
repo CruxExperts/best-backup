@@ -478,3 +478,7 @@ class TestKeyGeneration:
     def test_generate_keypair_unsupported_raises(self):
         with pytest.raises(ValueError, match="Unsupported"):
             EncryptionManager.generate_keypair(algorithm="unsupported")
+
+    def test_generate_keypair_ecdsa_unsupported(self):
+        with pytest.raises(ValueError, match="Unsupported"):
+            EncryptionManager.generate_keypair(algorithm="ecdsa-p384")

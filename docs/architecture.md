@@ -93,6 +93,7 @@ Orchestrates the full backup workflow:
 init → select items → prepare staging dir
   → backup configs → backup volumes → backup networks
   → backup filesystem paths (if filesystem_targets provided)
+  → write backup_manifest.json with file sizes and SHA-256 hashes
   → [if solid_archive] create_solid_archive → optionally encrypt whole file → upload file → cleanup staging only after success
   → [else] encrypt dir (if enabled) → upload dir to remotes
   → rotate old backups
@@ -112,11 +113,15 @@ Backs up arbitrary host filesystem paths and directory trees using rsync directl
 
 ### `bbackup/archive.py`
 
-Solid-archive support: creates a single compressed tarball from a backup directory and optionally encrypts the whole file. Exposes `create_solid_archive()`, `unpack_solid_archive()`, and naming helpers `is_solid_archive_name()`, `strip_solid_archive_suffix()` used by list/rotation/restore. When solid archive is enabled, the backup flow tars the staging dir, compresses it (using `backup.compression`), and optionally encrypts the result so remotes receive one file. Staging cleanup runs only after at least one successful upload.
+Solid-archive support: creates a single compressed tarball from a backup directory and optionally encrypts the whole file. Exposes `create_solid_archive()`, `unpack_solid_archive()`, and naming helpers `is_solid_archive_name()`, `strip_solid_archive_suffix()` used by list/rotation/restore. Archive creation writes `.partial` files and promotes them to the final path only after tar/encryption succeeds. When solid archive encryption succeeds, plaintext staging is removed before upload.
+
+### `bbackup/manifest.py`
+
+Every non-cancelled backup writes `backup_manifest.json` before encryption/upload. The manifest records schema version, backup name, tool version, requested source scope, filesystem source paths, volume artifact names, encryption mode, item results, errors, file sizes, and SHA-256 hashes. Restore verifies the manifest when present and fails before mutation on missing, changed, unlisted, or escaping file paths. Backups without a manifest are treated as legacy backups.
 
 ### `bbackup/restore.py`
 
-Reads a backup directory or a solid archive file and restores containers, volumes, networks, and filesystem paths. When the backup path is a file (e.g. `.tar.gz` or `.tar.gz.enc`), unpacks to a temp dir, runs the same restore logic, then removes the temp dir. Supports renaming on restore (`--rename old:new`). Handles decryption (per-dir or whole-archive for solid archives) before restore.
+Reads a backup directory or a solid archive file and restores containers, volumes, networks, and filesystem paths. When the backup path is a file (e.g. `.tar.gz` or `.tar.gz.enc`), unpacks to a temp dir, runs the same restore logic, then removes the temp dir. Supports renaming on restore (`--rename old:new`). Handles decryption (per-dir or whole-archive for solid archives) and manifest verification before restore. Existing Docker volume replacement uses a staging-volume copy preflight so a failed first copy leaves the existing volume untouched; Docker does not support atomic volume rename, so final replacement is still a destructive operation after preflight.
 
 ### `bbackup/tui.py`
 
@@ -127,7 +132,7 @@ Two main classes:
 
 ### `bbackup/remote.py`
 
-Abstracts three upload targets behind a common interface: local filesystem (shutil), rclone (subprocess), and SFTP (paramiko). Each remote is tried independently so one failure does not abort others. Upload progress feeds into `BackupStatus`.
+Abstracts three upload targets behind a common interface: local filesystem (shutil), rclone (subprocess), and SFTP (paramiko). Each remote is tried independently so one failure does not abort others. Uploads write to `.partial` destinations first and promote to final paths only after the copy succeeds. Upload progress feeds into `BackupStatus`.
 
 ### `bbackup/rotation.py`
 

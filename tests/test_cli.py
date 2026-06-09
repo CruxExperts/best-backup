@@ -197,6 +197,29 @@ class TestInitEncryptionCommand:
             )
         assert result.exception is None or result.exit_code in (0, 1)
 
+    def test_init_encryption_rejects_password(self, tmp_path):
+        key_dir = tmp_path / "keys"
+        result = CliRunner().invoke(
+            cli,
+            [
+                "init-encryption",
+                "--key-path",
+                str(key_dir),
+                "--password",
+                "secret",
+                "--output",
+                "json",
+            ],
+        )
+        assert result.exit_code == EXIT_USER_ERROR
+        data = json.loads(result.output)
+        assert data["success"] is False
+        assert not key_dir.exists()
+
+    def test_init_encryption_rejects_ecdsa_option(self):
+        result = CliRunner().invoke(cli, ["init-encryption", "--algorithm", "ecdsa-p384"])
+        assert result.exit_code != EXIT_SUCCESS
+
 
 # ---------------------------------------------------------------------------
 # TestListRemoteBackupsCommand
@@ -385,6 +408,182 @@ class TestBackupCommand:
         """backup with nonexistent backup-set exits with 1."""
         result = CliRunner().invoke(cli, ["backup", "--backup-set", "nonexistent_set"])
         assert result.exit_code == 1
+
+    def test_backup_duplicate_direct_path_names_exit_user_error(self, tmp_path):
+        src_a = tmp_path / "a" / "data"
+        src_b = tmp_path / "b" / "data"
+        src_a.mkdir(parents=True)
+        src_b.mkdir(parents=True)
+
+        result = CliRunner().invoke(
+            cli,
+            [
+                "backup",
+                "--containers",
+                "myapp",
+                "--paths",
+                str(src_a),
+                "--paths",
+                str(src_b),
+                "--output",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == EXIT_USER_ERROR
+        data = json.loads(result.output)
+        assert "Duplicate filesystem target name" in data["errors"][0]
+
+    def test_backup_partial_failure_exits_partial_and_skips_upload(self, tmp_path):
+        cfg_file = tmp_path / "config.yaml"
+        remote_dir = tmp_path / "remote"
+        cfg_file.write_text(textwrap.dedent(f"""
+            backup:
+              staging_dir: {tmp_path / "staging"}
+              solid_archive: false
+            remotes:
+              local1:
+                enabled: true
+                type: local
+                path: {remote_dir}
+            encryption:
+              enabled: false
+        """))
+        runner_ref = {}
+
+        def make_runner(config, status):
+            mock_runner = MagicMock()
+            mock_runner.run_backup.side_effect = lambda **kwargs: (
+                status.add_error("Failed to backup volume: data")
+                or setattr(status, "status", "partial")
+                or {"errors": ["Failed to backup volume: data"]}
+            )
+            runner_ref["runner"] = mock_runner
+            return mock_runner
+
+        with patch("bbackup.cli.BackupRunner", side_effect=make_runner):
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "--config",
+                    str(cfg_file),
+                    "backup",
+                    "--containers",
+                    "myapp",
+                    "--output",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == EXIT_PARTIAL
+        data = json.loads(result.output)
+        assert data["success"] is False
+        assert data["data"]["remotes"] == {}
+        assert data["data"]["encryption"] == "disabled"
+        runner_ref["runner"].upload_to_remotes.assert_not_called()
+
+    def test_backup_successful_encryption_removes_plaintext_staging(self, tmp_path):
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(textwrap.dedent(f"""
+            backup:
+              staging_dir: {tmp_path / "staging"}
+              solid_archive: false
+            remotes: {{}}
+            encryption:
+              enabled: true
+        """))
+        paths = {}
+
+        def make_runner(config, status):
+            mock_runner = MagicMock()
+
+            def run_backup(**kwargs):
+                backup_dir = kwargs["backup_dir"]
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                (backup_dir / "plain.txt").write_text("secret")
+                paths["plain"] = backup_dir
+                return {}
+
+            def encrypt_backup(backup_dir):
+                encrypted_dir = backup_dir.parent / f"{backup_dir.name}.enc"
+                encrypted_dir.mkdir(parents=True)
+                (encrypted_dir / "plain.txt.enc").write_text("encrypted")
+                status.encryption_status = "encrypted"
+                return encrypted_dir
+
+            mock_runner.run_backup.side_effect = run_backup
+            mock_runner.encrypt_backup_directory.side_effect = encrypt_backup
+            return mock_runner
+
+        with patch("bbackup.cli.BackupRunner", side_effect=make_runner):
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "--config",
+                    str(cfg_file),
+                    "backup",
+                    "--containers",
+                    "myapp",
+                    "--output",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == EXIT_SUCCESS
+        data = json.loads(result.output)
+        assert data["data"]["encryption"] == "encrypted"
+        assert data["data"]["backup_dir"].endswith(".enc")
+        assert not paths["plain"].exists()
+
+    def test_backup_encryption_failure_exits_system_error_and_skips_upload(self, tmp_path):
+        cfg_file = tmp_path / "config.yaml"
+        remote_dir = tmp_path / "remote"
+        cfg_file.write_text(textwrap.dedent(f"""
+            backup:
+              staging_dir: {tmp_path / "staging"}
+              solid_archive: false
+            remotes:
+              local1:
+                enabled: true
+                type: local
+                path: {remote_dir}
+            encryption:
+              enabled: true
+        """))
+        runner_ref = {}
+
+        def make_runner(config, status):
+            mock_runner = MagicMock()
+            mock_runner.run_backup.return_value = {}
+
+            def fail_encryption(path):
+                status.add_error("Encryption failed: key error")
+                status.status = "error"
+                raise RuntimeError("Encryption failed: key error")
+
+            mock_runner.encrypt_backup_directory.side_effect = fail_encryption
+            runner_ref["runner"] = mock_runner
+            return mock_runner
+
+        with patch("bbackup.cli.BackupRunner", side_effect=make_runner):
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "--config",
+                    str(cfg_file),
+                    "backup",
+                    "--containers",
+                    "myapp",
+                    "--output",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == EXIT_SYSTEM_ERROR
+        data = json.loads(result.output)
+        assert data["success"] is False
+        assert data["data"]["remotes"] == {}
+        runner_ref["runner"].upload_to_remotes.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -694,6 +893,20 @@ class TestDryRun:
         assert data["data"]["dry_run"] is True
         assert "would_backup" in data["data"]
         assert "containers" in data["data"]["would_backup"]
+
+    def test_restore_all_dry_run_includes_archive_backed_volumes(self, tmp_path):
+        volumes_dir = tmp_path / "volumes"
+        volumes_dir.mkdir()
+        (volumes_dir / "myvolume.tar.gz").write_bytes(b"")
+
+        result = CliRunner().invoke(
+            cli,
+            ["restore", "--backup-path", str(tmp_path), "--all", "--dry-run", "--output", "json"],
+        )
+
+        assert result.exit_code == EXIT_SUCCESS
+        data = json.loads(result.output)
+        assert data["data"]["would_restore"]["volumes"] == ["myvolume"]
 
 
 # ---------------------------------------------------------------------------

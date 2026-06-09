@@ -329,18 +329,18 @@ BBACKUP_SKILLS: Dict[str, Any] = {
         "steps": [
             {
                 "command": "bbackup init-encryption --method asymmetric --output json",
-                "description": "Generate RSA-4096 or ECDSA keypair. Returns key paths and config snippet.",
+                "description": "Generate RSA-4096 key material. Returns key paths and config snippet.",
                 "required_flags": [],
                 "optional_flags": {
                     "--method": "symmetric, asymmetric, or both",
                     "--key-path": "directory to save keys (default: ~/.config/bbackup/)",
-                    "--algorithm": "rsa-4096 or ecdsa-p384",
+                    "--algorithm": "rsa-4096",
                     "--output": "text or json",
                     "--input-json": "all params as flat JSON object",
                 },
                 "valid_values": {
                     "--method": ["symmetric", "asymmetric", "both"],
-                    "--algorithm": ["rsa-4096", "ecdsa-p384"],
+                    "--algorithm": ["rsa-4096"],
                     "--output": ["text", "json"],
                 },
                 "input_json_schema": {
@@ -354,7 +354,7 @@ BBACKUP_SKILLS: Dict[str, Any] = {
                         "key_path": {"type": "string"},
                         "algorithm": {
                             "type": "string",
-                            "enum": ["rsa-4096", "ecdsa-p384"],
+                            "enum": ["rsa-4096"],
                             "default": "rsa-4096",
                         },
                         "output": {"type": "string", "enum": ["text", "json"]},

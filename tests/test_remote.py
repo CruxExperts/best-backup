@@ -4,6 +4,7 @@ Created: 2026-02-26
 Last Updated: 2026-02-26
 """
 
+import shutil
 import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -85,6 +86,39 @@ class TestLocalStorage:
         result = mgr.upload_to_local(remote, src_dir, str(dest))
         assert result is True
 
+    def test_upload_file_uses_partial_then_replace(self, tmp_path):
+        mgr = make_manager()
+        src = tmp_path / "source.tar.gz"
+        src.write_bytes(b"new")
+        dest = tmp_path / "backup.tar.gz"
+        dest.write_bytes(b"old")
+        remote = make_remote(type_="local", path=str(tmp_path))
+
+        with patch("bbackup.remote.shutil.copy2", wraps=shutil.copy2) as mock_copy:
+            result = mgr.upload_to_local(remote, src, str(dest))
+
+        assert result is True
+        assert dest.read_bytes() == b"new"
+        assert not (tmp_path / "backup.tar.gz.partial").exists()
+        assert mock_copy.call_args.args[1] == dest.with_name("backup.tar.gz.partial")
+
+    def test_upload_directory_preserves_existing_until_copy_succeeds(self, tmp_path):
+        mgr = make_manager()
+        src_dir = tmp_path / "source"
+        src_dir.mkdir()
+        (src_dir / "new.txt").write_text("new")
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        (dest / "old.txt").write_text("old")
+        remote = make_remote(type_="local", path=str(tmp_path))
+
+        with patch("bbackup.remote.shutil.copytree", side_effect=RuntimeError("copy failed")):
+            result = mgr.upload_to_local(remote, src_dir, str(dest))
+
+        assert result is False
+        assert (dest / "old.txt").exists()
+        assert not dest.with_name("dest.partial").exists()
+
 
 # ---------------------------------------------------------------------------
 # TestLocalListing
@@ -146,7 +180,7 @@ class TestDispatch:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
-                stdout="  100 backup_001\n   200 backup_002\n",
+                stdout="backup_001/\nbackup_002/\n",
                 stderr=""
             )
             result = mgr.list_backups(remote)
@@ -174,12 +208,14 @@ class TestDispatch:
         src.mkdir()
         remote = make_remote(type_="rclone", remote_name="myremote", path="backups")
         with patch("shutil.which", return_value="/usr/bin/rclone"), \
-             patch("subprocess.Popen") as mock_popen:
+             patch("subprocess.Popen") as mock_popen, \
+             patch("subprocess.run") as mock_run:
             proc = MagicMock()
             proc.stdout.__iter__ = MagicMock(return_value=iter([]))
             proc.wait.return_value = None
             proc.returncode = 0
             mock_popen.return_value = proc
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             result = mgr.upload_backup(remote, src, "backup_20240101")
         assert result is True
 
@@ -213,12 +249,14 @@ class TestRclone:
         mgr = make_manager()
         remote = make_remote(type_="rclone", remote_name="myremote")
         with patch("shutil.which", return_value="/usr/bin/rclone"), \
-             patch("subprocess.Popen") as mock_popen:
+             patch("subprocess.Popen") as mock_popen, \
+             patch("subprocess.run") as mock_run:
             proc = MagicMock()
             proc.stdout.__iter__ = MagicMock(return_value=iter([]))
             proc.wait.return_value = None
             proc.returncode = 0
             mock_popen.return_value = proc
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             result = mgr.upload_to_rclone(remote, tmp_path, "backups/bkp")
         assert result is True
 
@@ -231,7 +269,8 @@ class TestRclone:
             received_lines.append(line)
 
         with patch("shutil.which", return_value="/usr/bin/rclone"), \
-             patch("subprocess.Popen") as mock_popen:
+             patch("subprocess.Popen") as mock_popen, \
+             patch("subprocess.run") as mock_run:
             proc = MagicMock()
             proc.stdout.__iter__ = MagicMock(
                 return_value=iter(["Transferred: 1.234 GiB", ""])
@@ -239,6 +278,7 @@ class TestRclone:
             proc.wait.return_value = None
             proc.returncode = 0
             mock_popen.return_value = proc
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             mgr.upload_to_rclone(remote, tmp_path, "backups/bkp", progress_callback=callback)
 
         assert len(received_lines) >= 1
@@ -246,12 +286,14 @@ class TestRclone:
     def test_list_rclone_backups_parses_output(self):
         mgr = make_manager()
         remote = make_remote(type_="rclone", remote_name="myremote", path="backups")
-        output = "  1234 backup_20240101_000000\n  5678 backup_20240201_000000\n"
+        output = "backup_20240101_000000/\nbackup_20240201_000000.tar.gz\nnested/file.txt\n"
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout=output, stderr="")
             result = mgr._list_rclone_backups(remote)
         assert "backup_20240101_000000" in result
-        assert "backup_20240201_000000" in result
+        assert "backup_20240201_000000.tar.gz" in result
+        assert "nested/file.txt" not in result
+        assert mock_run.call_args.args[0][0:2] == ["rclone", "lsf"]
 
     def test_list_rclone_backups_no_remote_name_returns_empty(self):
         mgr = make_manager()
@@ -284,12 +326,61 @@ class TestRclone:
             proc.wait.return_value = None
             proc.returncode = 0
             mock_popen.return_value = proc
-            mgr.upload_to_rclone(remote, src, "backups/bkp")
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+                mgr.upload_to_rclone(remote, src, "backups/bkp")
         call_cmd = mock_popen.call_args[0][0]
         assert "--transfers" in call_cmd
         assert "12" in call_cmd
         assert "--checkers" in call_cmd
         assert "6" in call_cmd
+
+    def test_upload_to_rclone_uses_partial_then_moveto(self, tmp_path):
+        mgr = make_manager()
+        remote = make_remote(type_="rclone", remote_name="myremote")
+        src = tmp_path / "backup"
+        src.mkdir()
+
+        with patch("shutil.which", return_value="/usr/bin/rclone"), \
+             patch("subprocess.Popen") as mock_popen, \
+             patch("subprocess.run") as mock_run:
+            proc = MagicMock()
+            proc.stdout.__iter__ = MagicMock(return_value=iter([]))
+            proc.wait.return_value = None
+            proc.returncode = 0
+            mock_popen.return_value = proc
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            result = mgr.upload_to_rclone(remote, src, "backups/bkp")
+
+        assert result is True
+        assert mock_popen.call_args.args[0][3] == "myremote:backups/bkp.partial"
+        assert mock_run.call_args_list[0].args[0][0:2] == ["rclone", "moveto"]
+        assert mock_run.call_args_list[0].args[0][2:4] == [
+            "myremote:backups/bkp.partial",
+            "myremote:backups/bkp",
+        ]
+
+    def test_upload_to_rclone_removes_partial_on_copy_failure(self, tmp_path):
+        mgr = make_manager()
+        remote = make_remote(type_="rclone", remote_name="myremote")
+        src = tmp_path / "backup"
+        src.mkdir()
+
+        with patch("shutil.which", return_value="/usr/bin/rclone"), \
+             patch("subprocess.Popen") as mock_popen, \
+             patch("subprocess.run") as mock_run:
+            proc = MagicMock()
+            proc.stdout.__iter__ = MagicMock(return_value=iter([]))
+            proc.wait.return_value = None
+            proc.returncode = 1
+            mock_popen.return_value = proc
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            result = mgr.upload_to_rclone(remote, src, "backups/bkp")
+
+        assert result is False
+        assert mock_run.call_args.args[0][0:2] == ["rclone", "purge"]
 
     def test_list_rclone_backups_includes_transfers_and_checkers_from_config(self, tmp_path):
         cfg_file = tmp_path / "config.yaml"
@@ -346,6 +437,8 @@ class TestSFTP:
 
         assert result is True
         mock_sftp.put.assert_called_once()
+        assert mock_sftp.put.call_args.args[1] == "/remote/backups.partial"
+        mock_sftp.posix_rename.assert_called_once_with("/remote/backups.partial", "/remote/backups")
 
     def test_no_key_file_passes_pkey_none(self, tmp_path):
         mgr = make_manager()
@@ -401,7 +494,8 @@ class TestSFTP:
              patch.object(mgr, "_upload_directory_sftp") as mock_upload_dir:
             mgr.upload_to_sftp(remote, src_dir, "/remote/backups")
 
-        mock_upload_dir.assert_called_once()
+        mock_upload_dir.assert_called_once_with(mock_sftp, src_dir, "/remote/backups.partial")
+        mock_sftp.posix_rename.assert_called_once_with("/remote/backups.partial", "/remote/backups")
 
     def test_upload_directory_sftp_recursive(self, tmp_path):
         """_upload_directory_sftp calls put for files and mkdir+recurse for dirs."""

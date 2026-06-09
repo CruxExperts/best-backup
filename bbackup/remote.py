@@ -42,13 +42,14 @@ class RemoteStorageManager:
             return False
         
         # Build rclone command
-        rclone_path = f"{remote.remote_name}:{remote_path}"
+        final_rclone_path = f"{remote.remote_name}:{remote_path}"
+        partial_rclone_path = f"{final_rclone_path}.partial"
         opts = get_effective_rclone_options(self.config, remote)
         cmd = [
             "rclone",
             "copy",
             str(local_path),
-            rclone_path,
+            partial_rclone_path,
             "--progress",
             "--stats=1s",
             "--transfers",
@@ -76,15 +77,54 @@ class RemoteStorageManager:
             
             process.wait()
             success = process.returncode == 0
-            if success:
-                logger.info(f"Successfully uploaded to rclone: {remote_path}")
-            else:
+            if not success:
                 logger.error(f"Failed to upload to rclone: {remote_path}")
-            return success
+                self._cleanup_rclone_partial(remote, remote_path, local_path)
+                return False
+
+            move_cmd = [
+                "rclone",
+                "moveto",
+                partial_rclone_path,
+                final_rclone_path,
+                "--transfers",
+                str(opts.transfers),
+                "--checkers",
+                str(opts.checkers),
+            ]
+            move_result = subprocess.run(move_cmd, capture_output=True, text=True, check=False)
+            if move_result.returncode != 0:
+                logger.error(f"Failed to promote rclone partial upload: {move_result.stderr.strip()}")
+                self._cleanup_rclone_partial(remote, remote_path, local_path)
+                return False
+
+            logger.info(f"Successfully uploaded to rclone: {remote_path}")
+            return True
         except Exception as e:
             logger.error(f"Error uploading to rclone: {e}")
             self.console.print(f"[red]Error uploading to rclone: {e}[/red]")
+            self._cleanup_rclone_partial(remote, remote_path, local_path)
             return False
+
+    def _cleanup_rclone_partial(self, remote: RemoteStorage, remote_path: str, local_path: Path) -> None:
+        """Best-effort removal of an incomplete rclone upload."""
+        if not remote.remote_name:
+            return
+        try:
+            opts = get_effective_rclone_options(self.config, remote)
+            partial_rclone_path = f"{remote.remote_name}:{remote_path}.partial"
+            cmd = [
+                "rclone",
+                "deletefile" if local_path.is_file() else "purge",
+                partial_rclone_path,
+                "--transfers",
+                str(opts.transfers),
+                "--checkers",
+                str(opts.checkers),
+            ]
+            subprocess.run(cmd, capture_output=True, text=True, check=False)
+        except Exception as e:
+            logger.warning(f"Could not remove rclone partial upload: {e}")
     
     def upload_to_sftp(
         self,
@@ -93,6 +133,9 @@ class RemoteStorageManager:
         remote_path: str,
     ) -> bool:
         """Upload to remote via SFTP."""
+        partial_remote_path = f"{remote_path}.partial"
+        sftp = None
+        ssh = None
         try:
             import paramiko
         except ImportError:
@@ -122,7 +165,7 @@ class RemoteStorageManager:
             
             # Setup SFTP
             sftp = ssh.open_sftp()
-            
+
             if local_path.is_file():
                 # remote_path is full destination path (e.g. path/backup_20260304.tar.gz); create parent only (Gap 1)
                 parts = remote_path.rstrip("/").split("/")
@@ -136,20 +179,44 @@ class RemoteStorageManager:
                                 sftp.mkdir(parent)
                             except IOError:
                                 pass
-                sftp.put(str(local_path), remote_path)
+                sftp.put(str(local_path), partial_remote_path)
             else:
                 try:
-                    sftp.mkdir(remote_path)
+                    sftp.mkdir(partial_remote_path)
                 except IOError:
                     pass
-                self._upload_directory_sftp(sftp, local_path, remote_path)
+                self._upload_directory_sftp(sftp, local_path, partial_remote_path)
+
+            self._rename_sftp(sftp, partial_remote_path, remote_path)
             
             sftp.close()
             ssh.close()
             return True
         except Exception as e:
+            try:
+                if sftp is not None:
+                    try:
+                        sftp.remove(partial_remote_path)
+                    except Exception:
+                        sftp.rmdir(partial_remote_path)
+            except Exception:
+                pass
+            try:
+                if sftp is not None:
+                    sftp.close()
+                if ssh is not None:
+                    ssh.close()
+            except Exception:
+                pass
             self.console.print(f"[red]Error uploading to SFTP: {e}[/red]")
             return False
+
+    def _rename_sftp(self, sftp, src: str, dest: str) -> None:
+        """Rename an SFTP path, preferring POSIX overwrite semantics when available."""
+        if hasattr(sftp, "posix_rename"):
+            sftp.posix_rename(src, dest)
+        else:
+            sftp.rename(src, dest)
     
     def _upload_directory_sftp(self, sftp, local_dir: Path, remote_dir: str):
         """Recursively upload directory via SFTP."""
@@ -173,11 +240,19 @@ class RemoteStorageManager:
         """Copy to local directory (or single file when backup is solid archive)."""
         try:
             dest = Path(os.path.expanduser(remote_path))
+            partial_dest = dest.with_name(f"{dest.name}.partial")
+            if partial_dest.exists():
+                if partial_dest.is_dir():
+                    shutil.rmtree(partial_dest)
+                else:
+                    partial_dest.unlink()
+
             if local_path.is_file():
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(local_path, dest)
+                shutil.copy2(local_path, partial_dest)
+                os.replace(partial_dest, dest)
             elif local_path.is_dir():
-                dest.mkdir(parents=True, exist_ok=True)
+                dest.parent.mkdir(parents=True, exist_ok=True)
                 def ignore_special_files(src, names):
                     ignored = []
                     for name in names:
@@ -185,11 +260,23 @@ class RemoteStorageManager:
                         if src_path.is_socket() or (src_path.is_symlink() and not src_path.exists()):
                             ignored.append(name)
                     return ignored
+                shutil.copytree(local_path, partial_dest, ignore=ignore_special_files)
                 if dest.exists():
-                    shutil.rmtree(dest)
-                shutil.copytree(local_path, dest, ignore=ignore_special_files, dirs_exist_ok=True)
+                    if dest.is_dir():
+                        shutil.rmtree(dest)
+                    else:
+                        dest.unlink()
+                partial_dest.replace(dest)
             return True
         except Exception as e:
+            try:
+                if partial_dest.exists():
+                    if partial_dest.is_dir():
+                        shutil.rmtree(partial_dest)
+                    else:
+                        partial_dest.unlink()
+            except Exception:
+                pass
             self.console.print(f"[red]Error copying to local: {e}[/red]")
             return False
     
@@ -231,8 +318,12 @@ class RemoteStorageManager:
         try:
             cmd = [
                 "rclone",
-                "ls",
+                "lsf",
                 f"{remote.remote_name}:{remote.path}",
+                "--max-depth",
+                "1",
+                "--format",
+                "p",
                 "--transfers",
                 str(opts.transfers),
                 "--checkers",
@@ -243,10 +334,10 @@ class RemoteStorageManager:
                 # Parse output to get backup names
                 backups = []
                 for line in result.stdout.splitlines():
-                    if line.strip():
-                        parts = line.split()
-                        if len(parts) >= 2:
-                            backups.append(parts[-1])
+                    name = line.strip()
+                    if not name or "/" in name.rstrip("/"):
+                        continue
+                    backups.append(name.rstrip("/"))
                 return backups
         except Exception:
             pass

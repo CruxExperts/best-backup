@@ -12,7 +12,9 @@ Two modes are available:
 
 **Symmetric (AES-256-GCM):** One key does both encryption and decryption. Simpler to set up. Good for single-server setups where the same machine backs up and restores.
 
-**Asymmetric (RSA-4096 or ECDSA P-384):** A public key encrypts, a private key decrypts. The public key can be shared or posted publicly. The private key stays on the restore machine only. This is the right choice when backup servers and restore servers are different machines, or when you want to separate the ability to create backups from the ability to read them.
+**Asymmetric (RSA-4096):** A public key encrypts, a private key decrypts. The public key can be shared or posted publicly. The private key stays on the restore machine only. This is the right choice when backup servers and restore servers are different machines, or when you want to separate the ability to create backups from the ability to read them.
+
+When encryption succeeds, bbackup removes the plaintext staging directory and keeps the encrypted directory or encrypted solid archive as the local artifact. If encryption is enabled but fails, backup upload is aborted rather than falling back to plaintext.
 
 ---
 

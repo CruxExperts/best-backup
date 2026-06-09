@@ -7,6 +7,7 @@ Last Updated: 2026-02-26
 """
 
 import json
+import tarfile
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -15,7 +16,8 @@ import pytest
 from docker.errors import DockerException, APIError
 
 from bbackup.config import Config
-from bbackup.restore import DockerRestore
+from bbackup.manifest import generate_backup_manifest
+from bbackup.restore import DockerRestore, list_volume_backup_names
 
 
 def make_restore(mock_docker_client):
@@ -265,6 +267,87 @@ class TestRestoreVolume:
         ]
         assert len(cp_calls) >= 1
 
+    def test_compressed_volume_archive_restores(self, mock_docker_client, mock_subprocess, tmp_path):
+        mock_run, _ = mock_subprocess
+        source_dir = tmp_path / "source" / "myvolume"
+        source_dir.mkdir(parents=True)
+        (source_dir / "data.txt").write_text("payload")
+        volumes_dir = tmp_path / "volumes"
+        volumes_dir.mkdir()
+        with tarfile.open(volumes_dir / "myvolume.tar.gz", "w:gz") as tar:
+            tar.add(source_dir, arcname="myvolume")
+
+        mock_docker_client.volumes.get.side_effect = APIError("not found")
+        mock_docker_client.volumes.create.return_value = MagicMock()
+        temp_container = MagicMock()
+        mock_docker_client.containers.run.return_value = temp_container
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        dr = make_restore(mock_docker_client)
+        assert dr.restore_volume("myvolume", tmp_path) is True
+
+        cp_calls = [
+            c for c in mock_run.call_args_list
+            if c.args and "docker" in c.args[0] and "cp" in c.args[0]
+        ]
+        assert len(cp_calls) == 1
+        assert "myvolume" in cp_calls[0].args[0][2]
+
+    def test_restore_volume_returns_false_when_docker_cp_fails(
+        self, mock_docker_client, mock_subprocess, tmp_path
+    ):
+        mock_run, _ = mock_subprocess
+        vol_dir = tmp_path / "volumes" / "myvolume"
+        vol_dir.mkdir(parents=True)
+        mock_docker_client.volumes.get.side_effect = APIError("not found")
+        mock_docker_client.volumes.create.return_value = MagicMock()
+        temp_container = MagicMock()
+        mock_docker_client.containers.run.return_value = temp_container
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="copy failed")
+
+        dr = make_restore(mock_docker_client)
+        assert dr.restore_volume("myvolume", tmp_path) is False
+        temp_container.stop.assert_called_once()
+        temp_container.remove.assert_called_once()
+
+    def test_existing_volume_preserved_when_preflight_copy_fails(
+        self, mock_docker_client, mock_subprocess, tmp_path
+    ):
+        mock_run, _ = mock_subprocess
+        vol_dir = tmp_path / "volumes" / "myvolume"
+        vol_dir.mkdir(parents=True)
+        existing_vol = MagicMock()
+        staging_vol = MagicMock()
+        mock_docker_client.volumes.get.return_value = existing_vol
+        mock_docker_client.volumes.create.return_value = staging_vol
+        temp_container = MagicMock()
+        mock_docker_client.containers.run.return_value = temp_container
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="copy failed")
+
+        dr = make_restore(mock_docker_client)
+        assert dr.restore_volume("myvolume", tmp_path) is False
+
+        existing_vol.remove.assert_not_called()
+        staging_vol.remove.assert_called_once()
+
+
+class TestVolumeBackupDiscovery:
+    def test_list_volume_backup_names_includes_archives(self, tmp_path):
+        volumes_dir = tmp_path / "volumes"
+        volumes_dir.mkdir()
+        (volumes_dir / "plain").mkdir()
+        (volumes_dir / "gzipped.tar.gz").write_bytes(b"")
+        (volumes_dir / "bzip.tar.bz2").write_bytes(b"")
+        (volumes_dir / "xzipped.tar.xz").write_bytes(b"")
+        (volumes_dir / "ignored.txt").write_text("")
+
+        assert list_volume_backup_names(tmp_path) == [
+            "bzip",
+            "gzipped",
+            "plain",
+            "xzipped",
+        ]
+
 
 # ---------------------------------------------------------------------------
 # TestRestoreNetwork
@@ -411,6 +494,50 @@ class TestRestoreBackup:
         )
         # Both volumes should be in results
         assert "vol_ok" in result["volumes"] or "vol_fail" in result["volumes"]
+
+    def test_manifest_hash_mismatch_fails_before_restore(
+        self, mock_docker_client, mock_subprocess, tmp_path
+    ):
+        vol_dir = tmp_path / "volumes" / "data"
+        vol_dir.mkdir(parents=True)
+        (vol_dir / "file.txt").write_text("original")
+        scope = Config(config_path=None).scope
+        generate_backup_manifest(tmp_path, scope)
+        (vol_dir / "file.txt").write_text("modified")
+
+        dr = make_restore(mock_docker_client)
+        result = dr.restore_backup(
+            tmp_path,
+            containers=None,
+            volumes=["data"],
+            networks=None,
+        )
+
+        assert result["volumes"] == {}
+        assert result["errors"] == ["Manifest file hash mismatch: volumes/data/file.txt"]
+        mock_docker_client.volumes.create.assert_not_called()
+
+    def test_manifest_extra_file_fails_before_restore(
+        self, mock_docker_client, mock_subprocess, tmp_path
+    ):
+        vol_dir = tmp_path / "volumes" / "data"
+        vol_dir.mkdir(parents=True)
+        (vol_dir / "file.txt").write_text("original")
+        scope = Config(config_path=None).scope
+        generate_backup_manifest(tmp_path, scope)
+        (vol_dir / "extra.txt").write_text("unexpected")
+
+        dr = make_restore(mock_docker_client)
+        result = dr.restore_backup(
+            tmp_path,
+            containers=None,
+            volumes=["data"],
+            networks=None,
+        )
+
+        assert result["volumes"] == {}
+        assert result["errors"] == ["Manifest file not listed: volumes/data/extra.txt"]
+        mock_docker_client.volumes.create.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

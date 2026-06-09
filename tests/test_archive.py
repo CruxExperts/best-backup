@@ -74,6 +74,23 @@ class TestCreateSolidArchive:
             partial = backup_dir.parent / "backup_20260304_120000.tar.gz"
             assert not partial.exists()
 
+    def test_create_solid_archive_preserves_existing_final_on_failure(self, tmp_path):
+        backup_dir = tmp_path / "backup_20260304_120000"
+        backup_dir.mkdir()
+        final = backup_dir.parent / "backup_20260304_120000.tar.gz"
+        final.write_bytes(b"existing")
+        compression = {"enabled": True, "level": 6, "format": "gzip"}
+        enc = MagicMock()
+        enc.enabled = True
+
+        with patch("bbackup.archive.EncryptionManager") as MockEnc:
+            MockEnc.return_value.encrypt_file.return_value = False
+            with pytest.raises(OSError):
+                create_solid_archive(backup_dir, compression, encryption_config=enc)
+
+        assert final.read_bytes() == b"existing"
+        assert not final.with_name(f"{final.name}.partial").exists()
+
 
 class TestUnpackSolidArchive:
     def test_unpack_returns_dir_unchanged(self, tmp_path):

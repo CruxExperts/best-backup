@@ -112,7 +112,7 @@ Generate symmetric and/or asymmetric keys for encrypting backups at rest and ret
 |---|---|:---:|---|---|
 | `--method` | `string` | no | `'symmetric'` | Encryption method to use. |
 | `--key-path` | `path` | no | `` | Directory to save key(s) (default: ~/.config/bbackup/). |
-| `--password` | `string` | no | `` | Password for key encryption (optional). |
+| `--password` | `string` | no | `` | Not currently supported for generated keys; command fails if provided. |
 | `--algorithm` | `string` | no | `'rsa-4096'` | Algorithm for asymmetric keys. |
 | `--upload-github` | `bool` | no | `False` | Remind about uploading public key to GitHub. |
 | `--skills` | `bool` | no | `False` | Show skills documentation for this command and exit. |

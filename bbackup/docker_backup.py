@@ -212,10 +212,21 @@ class DockerBackup:
                     
                     if result.returncode == 0:
                         # Copy from container to host
-                        subprocess.run(
+                        copy_result = subprocess.run(
                             ["docker", "cp", f"{temp_container_name}:/tmp/backup/.", str(volume_backup_dir)],
+                            capture_output=True,
+                            text=True,
                             check=False,
                         )
+                        if copy_result.returncode != 0:
+                            logger.error(
+                                f"docker cp backup failed for volume {volume_name}: {copy_result.stderr.strip()}"
+                            )
+                            raise RuntimeError(f"docker cp failed for volume {volume_name}")
+                    else:
+                        stderr = getattr(result, "stderr", "")
+                        logger.error(f"rsync backup failed for volume {volume_name}: {stderr.strip()}")
+                        raise RuntimeError(f"rsync failed for volume {volume_name}")
                 else:
                     # Fallback to tar if rsync not available
                     tar_cmd = [
@@ -227,14 +238,25 @@ class DockerBackup:
                     if result.returncode == 0:
                         # Copy tar from container and extract
                         temp_tar = backup_dir / "volumes" / f"{volume_name}.tar.gz"
-                        subprocess.run(
+                        copy_result = subprocess.run(
                             ["docker", "cp", f"{temp_container_name}:/tmp/volume_backup.tar.gz", str(temp_tar)],
+                            capture_output=True,
+                            text=True,
                             check=False,
                         )
+                        if copy_result.returncode != 0:
+                            logger.error(
+                                f"docker cp tar backup failed for volume {volume_name}: {copy_result.stderr.strip()}"
+                            )
+                            raise RuntimeError(f"docker cp failed for volume {volume_name}")
                         # Extract tar (tarfile imported at module level)
                         with tarfile.open(temp_tar, "r:gz") as tar:
-                            tar.extractall(volume_backup_dir)
+                            tar.extractall(volume_backup_dir, filter="data")
                         temp_tar.unlink()
+                    else:
+                        stderr = getattr(result, "stderr", "")
+                        logger.error(f"tar backup failed for volume {volume_name}: {stderr.strip()}")
+                        raise RuntimeError(f"tar failed for volume {volume_name}")
                 
                 # Cleanup
                 temp_container.stop()
@@ -277,6 +299,11 @@ class DockerBackup:
                     temp_container.remove()
                 except Exception as cleanup_error:
                     logger.error(f"Error during cleanup: {cleanup_error}")
+                if volume_backup_dir.exists():
+                    try:
+                        shutil.rmtree(volume_backup_dir)
+                    except OSError as cleanup_error:
+                        logger.error(f"Error removing failed volume backup artifact: {cleanup_error}")
                 logger.error(f"Failed to backup volume {volume_name}: {e}")
                 return False
                 
