@@ -45,9 +45,10 @@ class RemoteStorageManager:
         final_rclone_path = f"{remote.remote_name}:{remote_path}"
         partial_rclone_path = f"{final_rclone_path}.partial"
         opts = get_effective_rclone_options(self.config, remote)
+        rclone_copy_command = "copyto" if local_path.is_file() else "copy"
         cmd = [
             "rclone",
-            "copy",
+            rclone_copy_command,
             str(local_path),
             partial_rclone_path,
             "--progress",

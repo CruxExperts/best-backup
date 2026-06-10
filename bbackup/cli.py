@@ -317,18 +317,17 @@ def backup(
                 if enc_cfg:
                     status.update(action="Encrypting archive...", item="")
                 upload_path = create_solid_archive(backup_dir, compression_cfg, enc_cfg)
+                backup_dir = upload_path
                 backup_name = upload_path.name
+                if original_backup_dir.exists():
+                    shutil.rmtree(original_backup_dir)
                 if enc_cfg and str(upload_path).endswith(".enc"):
                     status.encryption_status = "encrypted"
-                    if original_backup_dir.exists():
-                        shutil.rmtree(original_backup_dir)
                 if remotes_to_use:
                     runner.upload_to_remotes(upload_path, backup_name, remotes_to_use)
                 any_ok = any(st == "success" for st in (status.remote_status or {}).values())
                 if any_ok:
                     try:
-                        if original_backup_dir.exists():
-                            shutil.rmtree(original_backup_dir)
                         if upload_path.exists():
                             upload_path.unlink(missing_ok=True)
                     except OSError:

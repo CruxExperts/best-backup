@@ -361,6 +361,38 @@ class TestRclone:
             "myremote:backups/bkp",
         ]
 
+    def test_file_upload_to_rclone_uses_copyto_for_single_archive(self, tmp_path):
+        mgr = make_manager()
+        remote = make_remote(type_="rclone", remote_name="myremote")
+        src = tmp_path / "backup_20260609_120000.tar.gz"
+        src.write_bytes(b"archive")
+
+        with patch("shutil.which", return_value="/usr/bin/rclone"), \
+             patch("subprocess.Popen") as mock_popen, \
+             patch("subprocess.run") as mock_run:
+            proc = MagicMock()
+            proc.stdout.__iter__ = MagicMock(return_value=iter([]))
+            proc.wait.return_value = None
+            proc.returncode = 0
+            mock_popen.return_value = proc
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            result = mgr.upload_to_rclone(remote, src, "backups/backup_20260609_120000.tar.gz")
+
+        assert result is True
+        copy_cmd = mock_popen.call_args.args[0]
+        assert copy_cmd[0:2] == ["rclone", "copyto"]
+        assert copy_cmd[2:4] == [
+            str(src),
+            "myremote:backups/backup_20260609_120000.tar.gz.partial",
+        ]
+        assert mock_run.call_args_list[0].args[0][0:4] == [
+            "rclone",
+            "moveto",
+            "myremote:backups/backup_20260609_120000.tar.gz.partial",
+            "myremote:backups/backup_20260609_120000.tar.gz",
+        ]
+
     def test_upload_to_rclone_removes_partial_on_copy_failure(self, tmp_path):
         mgr = make_manager()
         remote = make_remote(type_="rclone", remote_name="myremote")

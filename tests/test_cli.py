@@ -535,6 +535,55 @@ class TestBackupCommand:
         assert data["data"]["backup_dir"].endswith(".enc")
         assert not paths["plain"].exists()
 
+    def test_solid_archive_backup_removes_expanded_staging_dir(self, tmp_path):
+        staging_dir = tmp_path / "staging"
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(textwrap.dedent(f"""
+            backup:
+              local_staging: {staging_dir}
+              solid_archive: true
+            remotes: {{}}
+            encryption:
+              enabled: false
+        """))
+        paths = {}
+
+        def make_runner(config, status):
+            mock_runner = MagicMock()
+
+            def run_backup(**kwargs):
+                backup_dir = kwargs["backup_dir"]
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                (backup_dir / "backup_manifest.json").write_text("{}")
+                (backup_dir / "filesystems").mkdir()
+                (backup_dir / "filesystems" / "repo.txt").write_text("content")
+                paths["expanded"] = backup_dir
+                return {}
+
+            mock_runner.run_backup.side_effect = run_backup
+            return mock_runner
+
+        with patch("bbackup.cli.BackupRunner", side_effect=make_runner):
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "--config",
+                    str(cfg_file),
+                    "backup",
+                    "--containers",
+                    "myapp",
+                    "--output",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == EXIT_SUCCESS
+        data = json.loads(result.output)
+        archive_path = staging_dir / f"{paths['expanded'].name}.tar.gz"
+        assert data["data"]["backup_dir"] == str(archive_path)
+        assert archive_path.is_file()
+        assert not paths["expanded"].exists()
+
     def test_backup_encryption_failure_exits_system_error_and_skips_upload(self, tmp_path):
         cfg_file = tmp_path / "config.yaml"
         remote_dir = tmp_path / "remote"
