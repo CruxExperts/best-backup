@@ -17,10 +17,10 @@
 ---
 
 ```bash
-uv tool install git+https://github.com/CruxExperts/best-backup.git
+uv tool install --force git+https://github.com/CruxExperts/best-backup.git
 ```
 
-`uv` handles the isolated tool environment automatically. If `bbackup` is already installed and you want to move to a newer version, use `uv tool upgrade bbackup` (or the system-wide variant from [Installation](#installation)) instead of re-running `uv tool install`. See [Installation](#installation) if you need to install `uv` first, or for alternative methods.
+`uv` handles the isolated tool environment automatically. This one command works for first install and redeploy/update from GitHub. See [Installation](#installation) if you need to install `uv` first, or for advanced system-wide `/usr/local/bin` deployment.
 
 ---
 
@@ -83,46 +83,33 @@ flowchart LR
 
 ## Installation
 
-`uv` handles the tool environment automatically. Pick the method that fits your setup.
+`uv` handles the tool environment automatically.
 
-### uv tool install (single user)
+### Install or redeploy from GitHub
 
-Use this when installing `bbackup` for the first time for your user only:
+Run this when `uv` is already installed:
+
+```bash
+uv tool install --force git+https://github.com/CruxExperts/best-backup.git
+```
+
+It creates an isolated uv tool environment and links `bbackup` and `bbman` into the uv tool bin directory. The `--force` flag makes the same command safe for first install, repair, and redeploy/update.
+
+If `uv` is not installed yet:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-uv tool update-shell
-uv tool install git+https://github.com/CruxExperts/best-backup.git
+~/.local/bin/uv tool update-shell
+~/.local/bin/uv tool install --force git+https://github.com/CruxExperts/best-backup.git
 ```
 
-Open a new shell and both commands are ready.
+Open a new shell after `uv tool update-shell` so `bbackup` and `bbman` are on your PATH.
 
-### uv tool upgrade (single user)
+### Advanced: system-wide links
 
-If `bbackup` is already installed via uv and you just want to move to a newer version:
-
-```bash
-uv tool upgrade bbackup
-```
-
-Use `uv tool install --force git+https://github.com/CruxExperts/best-backup.git` if you want a fresh tool environment.
-
-### uv tool install (server / all users)
-
-Installs to `/usr/local/bin` and makes `bbackup` and `bbman` available to every user and cron job:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool install git+https://github.com/CruxExperts/best-backup.git
-```
-
-### uv tool upgrade (server / all users)
-
-If `bbackup` is already installed system-wide via uv and you want to update in place:
-
-```bash
-sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool upgrade bbackup
-```
+Most installs should use the uv tool command above. If `/usr/local/bin/bbackup`
+and `/usr/local/bin/bbman` must be shared by every user or a root-owned
+scheduler, see [INSTALL.md](INSTALL.md#advanced-system-wide-uv-tool-links).
 
 For development setup, local source installs, and uninstall instructions, see [INSTALL.md](INSTALL.md).
 

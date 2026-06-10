@@ -8,27 +8,23 @@
 
 `uv` handles the isolated tool environment automatically and wires `bbackup` and `bbman` into your PATH.
 
-**Single user** (commands available only to you):
+If `uv` is already installed:
+
+```bash
+uv tool install --force git+https://github.com/CruxExperts/best-backup.git
+```
+
+If `uv` is not installed yet:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-uv tool update-shell
+~/.local/bin/uv tool update-shell
+~/.local/bin/uv tool install --force git+https://github.com/CruxExperts/best-backup.git
 ```
 
-Open a new shell, then:
+Open a new shell after `uv tool update-shell`.
 
-```bash
-uv tool install git+https://github.com/CruxExperts/best-backup.git
-```
-
-**Server / all users** (commands available to every user and cron jobs):
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool install git+https://github.com/CruxExperts/best-backup.git
-```
-
-If you already have `bbackup` installed via `uv` and only need to update it, run `uv tool upgrade bbackup` for a single-user install or `sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool upgrade bbackup` for the server-wide method, rather than re-running `uv tool install`. See [INSTALL.md](INSTALL.md) for uninstall and alternative install methods.
+Use the same `uv tool install --force ...` command later to redeploy or update from GitHub. See [INSTALL.md](INSTALL.md) for uninstall, local clone installs, and the advanced system-wide `/usr/local/bin` form.
 
 ---
 

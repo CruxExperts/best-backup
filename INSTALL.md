@@ -4,24 +4,32 @@
 
 ---
 
-## Recommended: uv tool, single user
+## Recommended: uv tool
 
 `uv tool install` installs bbackup into an isolated tool environment and links
 `bbackup` and `bbman` into the uv tool bin directory.
 
-### Install uv
+### Install or redeploy from GitHub
+
+If `uv` is already installed, this is the command:
+
+```bash
+uv tool install --force git+https://github.com/CruxExperts/best-backup.git
+```
+
+Use the same command for first install, repair, or update from GitHub.
+
+If `uv` is not installed yet:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-uv tool update-shell
+~/.local/bin/uv tool update-shell
+~/.local/bin/uv tool install --force git+https://github.com/CruxExperts/best-backup.git
 ```
 
-Open a new shell after `uv tool update-shell`, then install bbackup:
+Open a new shell after `uv tool update-shell`, then verify:
 
 ```bash
-uv tool install git+https://github.com/CruxExperts/best-backup.git
-
-# Verify
 bbackup --version
 bbman --version
 ```
@@ -29,11 +37,8 @@ bbman --version
 ### Update
 
 ```bash
-uv tool upgrade bbackup
+uv tool install --force git+https://github.com/CruxExperts/best-backup.git
 ```
-
-Use `uv tool install --force git+https://github.com/CruxExperts/best-backup.git`
-if you want a fresh tool environment.
 
 ### Uninstall
 
@@ -43,26 +48,35 @@ uv tool uninstall bbackup
 
 ---
 
-## Server install: uv tool, system-wide
+## Advanced: system-wide uv tool links
 
-For shared servers or cron jobs that need commands under `/usr/local/bin`, run
-uv with explicit tool directories:
+Use this only when shared servers or root-owned cron jobs need commands under
+`/usr/local/bin`:
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool install git+https://github.com/CruxExperts/best-backup.git
+UV="$(command -v uv)"
+sudo env \
+  UV_TOOL_DIR=/opt/uv/tools \
+  UV_TOOL_BIN_DIR=/usr/local/bin \
+  "$UV" tool install --force git+https://github.com/CruxExperts/best-backup.git
 
 # Verify as any user
 bbackup --version
 bbman --version
 ```
 
-Update or uninstall with the same directory environment:
+Use the same command to update or repair the system-wide install. Uninstall with:
 
 ```bash
-sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool upgrade bbackup
-sudo env UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/usr/local/bin uv tool uninstall bbackup
+UV="$(command -v uv)"
+sudo env \
+  UV_TOOL_DIR=/opt/uv/tools \
+  UV_TOOL_BIN_DIR=/usr/local/bin \
+  "$UV" tool uninstall bbackup
 ```
+
+The `UV="$(command -v uv)"` prefix avoids `env: 'uv': No such file or directory`
+when sudo uses a restricted PATH.
 
 Each user still has their own config at `~/.config/bbackup/config.yaml` and
 their own log at `~/.local/share/bbackup/bbackup.log`. Only the command links
@@ -180,7 +194,7 @@ Open a new shell after updating the shell configuration.
 Use the single-user install unless you intentionally need system-wide commands:
 
 ```bash
-uv tool install git+https://github.com/CruxExperts/best-backup.git
+uv tool install --force git+https://github.com/CruxExperts/best-backup.git
 ```
 
 **`error: externally-managed-environment` on Ubuntu 22.04+ / Debian 12+**
@@ -189,7 +203,7 @@ Do not install into the system Python. Use uv tool installs or the UV-managed
 project environment:
 
 ```bash
-uv tool install git+https://github.com/CruxExperts/best-backup.git
+uv tool install --force git+https://github.com/CruxExperts/best-backup.git
 uv sync --locked
 ```
 
