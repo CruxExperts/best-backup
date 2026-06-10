@@ -1,6 +1,6 @@
 # CLI skills catalog
 
-> Generated from the bbackup/bbman CLI metadata. Version: 1.8.1. This catalog is authoritative for this version.
+> Generated from the bbackup/bbman CLI metadata. Version: 1.8.2. This catalog is authoritative for this version.
 
 ## bbackup
 
