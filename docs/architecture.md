@@ -14,7 +14,7 @@
 | Docker integration | docker-py SDK | 7.0.0+ |
 | Config format | PyYAML | 6.0.1+ |
 | SFTP | paramiko | 3.4.0+ |
-| Encryption | cryptography | 41.0.0+ |
+| Encryption | cryptography | 48.0.1+ |
 | HTTP (key fetching) | requests | 2.31.0+ |
 | Volume backup | rsync | system |
 | Cloud storage | rclone | optional |

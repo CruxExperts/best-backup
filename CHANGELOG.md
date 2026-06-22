@@ -12,6 +12,18 @@ current uv-based install, development, and release instructions.
 
 ---
 
+## [1.8.4] - 2026-06-22
+
+### Security
+
+- Raised the `cryptography` runtime dependency floor to `48.0.1` to pick up patched OpenSSL wheels for GHSA-537c-gmf6-5ccf.
+
+### Changed
+
+- Release publishing now uploads only the bbackup wheel and source archive artifacts.
+
+---
+
 ## [1.8.3] - 2026-06-22
 
 ### Added
@@ -258,7 +270,8 @@ current uv-based install, development, and release instructions.
 
 ---
 
-[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.8.3...HEAD
+[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.8.4...HEAD
+[1.8.4]: https://github.com/CruxExperts/best-backup/compare/v1.8.3...v1.8.4
 [1.8.3]: https://github.com/CruxExperts/best-backup/compare/v1.8.2...v1.8.3
 [1.8.2]: https://github.com/CruxExperts/best-backup/compare/v1.8.1...v1.8.2
 [1.8.1]: https://github.com/CruxExperts/best-backup/compare/v1.8.0...v1.8.1
