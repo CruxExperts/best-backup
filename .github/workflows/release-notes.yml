@@ -64,6 +64,8 @@ jobs:
         with:
           name: "v${{ steps.version.outputs.version }}"
           body_path: release_notes.txt
-          files: dist/*
+          files: |
+            dist/bbackup-*.tar.gz
+            dist/bbackup-*.whl
           draft: false
           prerelease: false

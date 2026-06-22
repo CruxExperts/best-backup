@@ -136,8 +136,12 @@ def main() -> int:
         errors.append(".github/workflows/release-notes.yml must fail when release notes are missing")
     if "contents: write" not in release_workflow:
         errors.append(".github/workflows/release-notes.yml must grant contents: write")
-    if "uv build" not in release_workflow or "files: dist/*" not in release_workflow:
-        errors.append(".github/workflows/release-notes.yml must build and attach dist artifacts")
+    if (
+        "uv build" not in release_workflow
+        or "dist/bbackup-*.tar.gz" not in release_workflow
+        or "dist/bbackup-*.whl" not in release_workflow
+    ):
+        errors.append(".github/workflows/release-notes.yml must build and attach bbackup dist artifacts")
     if 'test "${{ steps.version.outputs.version }}" = "$(cat VERSION)"' not in release_workflow:
         errors.append(".github/workflows/release-notes.yml must verify the tag matches VERSION")
     for release_check in (
