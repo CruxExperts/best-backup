@@ -12,6 +12,26 @@ current uv-based install, development, and release instructions.
 
 ---
 
+## [1.8.3] - 2026-06-22
+
+### Added
+
+- Backup runs now include a compressed `metadata.tar.*` archive of Docker config and network metadata when those metadata directories exist.
+
+### Changed
+
+- CI now tests Python 3.12, 3.13, and 3.14 and uses `actions/checkout@v7`.
+- Ruff release checks now include tests and the generated CLI skills script.
+- TUI headers now display the package version instead of a hardcoded `1.0.0`.
+- Username-only GitHub public-key lookup now uses standard repositories only; explicit Gist IDs remain supported.
+
+### Fixed
+
+- `restore --all --dry-run` now discovers containers, volumes, networks, and filesystem targets from solid archive backup files.
+- Non-dry-run filesystem restores now reject missing or ambiguous destinations before any restore mutation runs.
+
+---
+
 ## [1.8.2] - 2026-06-09
 
 ### Changed
@@ -238,7 +258,8 @@ current uv-based install, development, and release instructions.
 
 ---
 
-[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.8.2...HEAD
+[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.8.3...HEAD
+[1.8.3]: https://github.com/CruxExperts/best-backup/compare/v1.8.2...v1.8.3
 [1.8.2]: https://github.com/CruxExperts/best-backup/compare/v1.8.1...v1.8.2
 [1.8.1]: https://github.com/CruxExperts/best-backup/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/CruxExperts/best-backup/compare/v1.7.0...v1.8.0

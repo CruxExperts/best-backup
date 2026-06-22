@@ -18,6 +18,12 @@ from .manifest import generate_backup_manifest
 logger = get_logger('backup_runner')
 
 
+def _metadata_archive_path(backup_dir: Path, config: Config) -> Path:
+    compression = config.data.get("backup", {}).get("compression", {})
+    ext = {"gzip": "gz", "bzip2": "bz2", "xz": "xz"}.get(compression.get("format", "gzip"), "gz")
+    return backup_dir / f"metadata.tar.{ext}"
+
+
 class BackupRunner:
     """Runs backup operations with status tracking."""
     
@@ -268,6 +274,22 @@ class BackupRunner:
 
         if self.status.status == "cancelled":
             self.status.status = "cancelled"
+        else:
+            metadata_inputs_exist = any(
+                (backup_dir / name).exists()
+                for name in ("configs", "networks")
+            )
+            if metadata_inputs_exist:
+                metadata_archive = _metadata_archive_path(backup_dir, self.config)
+                if not self.docker_backup.create_metadata_archive(backup_dir, metadata_archive):
+                    metadata_archive.unlink(missing_ok=True)
+                    error_msg = "Failed to create metadata archive"
+                    logger.error(error_msg)
+                    results["errors"].append(error_msg)
+                    self.status.add_error(error_msg)
+
+        if self.status.status == "cancelled":
+            self.status.status = "cancelled"
         elif results["errors"]:
             self.status.status = "partial"
         else:
@@ -288,13 +310,6 @@ class BackupRunner:
                 },
                 errors=results["errors"],
             )
-
-        # TODO: call self.docker_backup.create_metadata_archive(backup_dir) here
-        # to produce a compressed tar of configs/networks metadata.
-        # The method exists in docker_backup.py but is not yet wired into
-        # this workflow. When integrated, it should run after all item
-        # backups complete and before encrypt_backup_directory().
-        
         return results
     
     def _parse_rsync_progress(self, line: str) -> None:

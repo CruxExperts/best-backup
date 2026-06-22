@@ -1,6 +1,9 @@
 #!/bin/bash
 # Test backup with active database operations (file locks)
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 echo "Starting backup test with active database operations..."
 
 # Start background database operations
@@ -29,15 +32,22 @@ echo "Starting backup test with active database operations..."
 ) &
 DB_OPS_PID=$!
 
+cleanup_db_ops() {
+    kill "$DB_OPS_PID" 2>/dev/null || true
+    wait "$DB_OPS_PID" 2>/dev/null || true
+}
+trap cleanup_db_ops EXIT
+
 echo "Database operations running in background (PID: $DB_OPS_PID)"
 
 # Run backup
 echo "Starting backup..."
-cd /mnt/data/devzone/linuxtools/best-backup
+cd "$REPO_ROOT" || exit 1
 ./bbackup.py backup --containers test_postgres --no-interactive
+BACKUP_STATUS=$?
 
-# Stop background operations
-kill $DB_OPS_PID 2>/dev/null
-wait $DB_OPS_PID 2>/dev/null
+if [ "$BACKUP_STATUS" -ne 0 ]; then
+    exit "$BACKUP_STATUS"
+fi
 
 echo "Backup test complete!"

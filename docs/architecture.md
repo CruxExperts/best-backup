@@ -130,7 +130,7 @@ Solid-archive support: creates a single compressed tarball from a backup directo
 
 ### `bbackup/manifest.py`
 
-Every non-cancelled backup writes `backup_manifest.json` before encryption/upload. The manifest records schema version, backup name, tool version, requested source scope, filesystem source paths, volume artifact names, encryption mode, item results, errors, file sizes, and SHA-256 hashes. Restore verifies the manifest when present and fails before mutation on missing, changed, unlisted, or escaping file paths. Backups without a manifest are treated as legacy backups.
+Every non-cancelled backup writes `backup_manifest.json` before encryption/upload. The manifest records schema version, backup name, tool version, requested source scope, filesystem source paths, volume artifact names, encryption mode, item results, errors, file sizes, and SHA-256 hashes. When Docker config or network metadata exists, backup runs also write a compressed `metadata.tar.*` archive before the manifest so verification covers that archive. Restore verifies the manifest when present and fails before mutation on missing, changed, unlisted, or escaping file paths. Backups without a manifest are treated as legacy backups.
 
 ### `bbackup/restore.py`
 

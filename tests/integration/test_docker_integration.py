@@ -11,7 +11,6 @@ Last Updated: 2026-02-27
 
 import io
 import json
-import os
 import uuid
 
 import pytest
@@ -306,7 +305,6 @@ def test_filesystem_backup_incremental_hardlinks(seeded_fs_dir, tmp_path):
     assert r1 is True
     assert r2 is True
 
-    dest1 = run1 / "filesystems" / "docs"
     dest2 = run2 / "filesystems" / "docs"
 
     hardlinked = []

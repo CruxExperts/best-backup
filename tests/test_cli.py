@@ -5,10 +5,10 @@ Last Updated: 2026-02-27
 """
 
 import json
+import tarfile
 import textwrap
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 import bbackup
@@ -16,10 +16,8 @@ from bbackup.cli import cli
 from bbackup.cli_utils import (
     EXIT_SUCCESS,
     EXIT_USER_ERROR,
-    EXIT_CONFIG_ERROR,
     EXIT_SYSTEM_ERROR,
     EXIT_PARTIAL,
-    EXIT_CANCELLED,
 )
 
 
@@ -956,6 +954,79 @@ class TestDryRun:
         assert result.exit_code == EXIT_SUCCESS
         data = json.loads(result.output)
         assert data["data"]["would_restore"]["volumes"] == ["myvolume"]
+
+    def test_restore_all_dry_run_discovers_solid_archive_targets(self, tmp_path):
+        backup_root = tmp_path / "backup_20260621_120000"
+        (backup_root / "configs").mkdir(parents=True)
+        (backup_root / "volumes").mkdir()
+        (backup_root / "networks").mkdir()
+        (backup_root / "filesystems" / "documents").mkdir(parents=True)
+        (backup_root / "configs" / "web_config.json").write_text("{}", encoding="utf-8")
+        (backup_root / "volumes" / "dbdata.tar.gz").write_bytes(b"")
+        (backup_root / "networks" / "frontend.json").write_text("{}", encoding="utf-8")
+        (backup_root / "filesystems" / "documents" / "file.txt").write_text("data", encoding="utf-8")
+        archive_path = tmp_path / "backup_20260621_120000.tar.gz"
+        with tarfile.open(archive_path, "w:gz") as tar:
+            tar.add(backup_root, arcname=backup_root.name)
+
+        result = CliRunner().invoke(
+            cli,
+            ["restore", "--backup-path", str(archive_path), "--all", "--dry-run", "--output", "json"],
+        )
+
+        assert result.exit_code == EXIT_SUCCESS
+        data = json.loads(result.output)
+        assert data["data"]["would_restore"] == {
+            "containers": ["web"],
+            "volumes": ["dbdata"],
+            "networks": ["frontend"],
+            "filesystems": ["documents"],
+        }
+
+    def test_restore_all_with_filesystem_requires_destination_before_restore(self, tmp_path):
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "filesystems" / "documents").mkdir(parents=True)
+        (tmp_path / "configs" / "web_config.json").write_text("{}", encoding="utf-8")
+
+        with patch("bbackup.cli.DockerRestore") as MockRestore:
+            result = CliRunner().invoke(
+                cli,
+                ["restore", "--backup-path", str(tmp_path), "--all", "--output", "json"],
+            )
+
+        assert result.exit_code == EXIT_USER_ERROR
+        data = json.loads(result.output)
+        assert "Filesystem restore requires --filesystem-destination" in data["errors"]
+        MockRestore.return_value.restore_backup.assert_not_called()
+
+    def test_restore_rejects_multiple_filesystems_sharing_destination_before_restore(self, tmp_path):
+        destination = tmp_path / "restore"
+
+        with patch("bbackup.cli.DockerRestore") as MockRestore:
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "restore",
+                    "--backup-path",
+                    str(tmp_path),
+                    "--filesystem",
+                    "documents",
+                    "--filesystem",
+                    "photos",
+                    "--filesystem-destination",
+                    str(destination),
+                    "--output",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == EXIT_USER_ERROR
+        data = json.loads(result.output)
+        assert any(
+            "multiple filesystem targets cannot share one destination" in error
+            for error in data["errors"]
+        )
+        MockRestore.return_value.restore_backup.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

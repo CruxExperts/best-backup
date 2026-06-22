@@ -103,6 +103,42 @@ class TestRunBackupLifecycle:
         assert manifest["status"] == "complete"
         assert manifest["source_scope"]["volumes"] is False
 
+    def test_run_backup_creates_metadata_archive_before_manifest(self, mock_docker_client, tmp_path):
+        runner = make_runner(mock_docker_client, tmp_path)
+        runner._mock_db.backup_container_config.side_effect = (
+            lambda _name, path: (path / "web_config.json").write_text("{}", encoding="utf-8") is not None
+        )
+
+        def create_metadata_archive(_backup_dir, output_file):
+            output_file.write_bytes(b"metadata")
+            return True
+
+        runner._mock_db.create_metadata_archive.side_effect = create_metadata_archive
+        scope = BackupScope(containers=True, volumes=False, networks=False, configs=True)
+
+        runner.run_backup(tmp_path, containers=["web"], scope=scope)
+
+        metadata_archive = tmp_path / "metadata.tar.gz"
+        assert metadata_archive.exists()
+        manifest = json.loads((tmp_path / "backup_manifest.json").read_text())
+        manifest_paths = {entry["path"] for entry in manifest["files"]}
+        assert "metadata.tar.gz" in manifest_paths
+
+    def test_metadata_archive_failure_sets_partial_status(self, mock_docker_client, tmp_path):
+        runner = make_runner(mock_docker_client, tmp_path)
+        runner._mock_db.backup_container_config.side_effect = (
+            lambda _name, path: (path / "web_config.json").write_text("{}", encoding="utf-8") is not None
+        )
+        runner._mock_db.create_metadata_archive.return_value = False
+        scope = BackupScope(containers=True, volumes=False, networks=False, configs=True)
+
+        result = runner.run_backup(tmp_path, containers=["web"], scope=scope)
+
+        assert "Failed to create metadata archive" in result["errors"]
+        assert runner.status.status == "partial"
+        manifest = json.loads((tmp_path / "backup_manifest.json").read_text())
+        assert manifest["status"] == "partial"
+
     def test_start_called_before_work(self, mock_docker_client, tmp_path):
         runner = make_runner(mock_docker_client, tmp_path)
         scope = BackupScope(containers=False, volumes=False, networks=False, configs=False)

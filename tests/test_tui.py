@@ -11,6 +11,7 @@ from datetime import timedelta
 from io import StringIO
 
 
+import bbackup
 from bbackup.config import Config
 from bbackup.tui import BackupStatus, BackupTUI
 
@@ -259,3 +260,25 @@ class TestBackupTUI:
         # Replace console with one that writes to a buffer to avoid terminal output
         tui.console = Console(file=StringIO())
         tui.show_header()
+
+    def test_show_header_uses_package_version(self):
+        from rich.console import Console
+        cfg = Config(config_path=None)
+        tui = BackupTUI(cfg)
+        output = StringIO()
+        tui.console = Console(file=output, force_terminal=False, width=100)
+
+        tui.show_header()
+
+        assert f"Version {bbackup.__version__}" in output.getvalue()
+
+    def test_live_dashboard_header_uses_package_version(self):
+        from rich.console import Console
+        cfg = Config(config_path=None)
+        tui = BackupTUI(cfg)
+        output = StringIO()
+        console = Console(file=output, force_terminal=False, width=120)
+
+        console.print(tui.create_live_dashboard())
+
+        assert f"v{bbackup.__version__}" in output.getvalue()

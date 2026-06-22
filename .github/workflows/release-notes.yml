@@ -13,7 +13,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -35,7 +35,7 @@ jobs:
           uv sync --locked
           uv run python scripts/check_version_sync.py
           uv run python scripts/check_publishing_ready.py
-          uv run ruff check bbackup/ scripts/check_publishing_ready.py scripts/check_version_sync.py scripts/smoke_installed_artifact.py
+          uv run ruff check bbackup/ scripts/check_publishing_ready.py scripts/check_version_sync.py scripts/smoke_installed_artifact.py scripts/generate_cli_skills.py tests/
           uv run python scripts/generate_cli_skills.py --check
           uv run python -m py_compile bbackup.py bbman.py bbackup/*.py bbackup/data/*.py bbackup/management/*.py scripts/*.py
           uv run pytest

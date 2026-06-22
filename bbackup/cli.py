@@ -24,7 +24,7 @@ from .config import Config, BackupScope, FilesystemTarget
 from .docker_backup import DockerBackup
 from .tui import BackupTUI, BackupStatus
 from .remote import RemoteStorageManager
-from .archive import create_solid_archive
+from .archive import create_solid_archive, is_solid_archive_name, unpack_solid_archive
 from .backup_runner import BackupRunner
 from .restore import DockerRestore, list_volume_backup_names
 from .logging import setup_logging
@@ -59,6 +59,46 @@ def _find_duplicate_filesystem_target_names(targets: List[FilesystemTarget]) -> 
             duplicates.append(target.name)
         seen.add(target.name)
     return duplicates
+
+
+def _discover_restore_all_targets(
+    backup_path: Path,
+    config: Config,
+) -> tuple[List[str], List[str], List[str], List[str]]:
+    """Discover restore targets from a backup directory or solid archive file."""
+    discovery_path = backup_path
+    temp_root_to_remove: Optional[Path] = None
+
+    try:
+        if backup_path.is_file() and is_solid_archive_name(backup_path.name):
+            discovery_path, temp_root_to_remove = unpack_solid_archive(
+                backup_path,
+                dest_dir=None,
+                encryption_config=config.encryption if config.encryption.enabled else None,
+            )
+
+        configs_dir = discovery_path / "configs"
+        networks_dir = discovery_path / "networks"
+        filesystems_dir = discovery_path / "filesystems"
+
+        containers = []
+        volumes = []
+        networks = []
+        filesystems = []
+
+        if configs_dir.exists():
+            containers = sorted(f.stem.replace("_config", "") for f in configs_dir.glob("*_config.json"))
+        if (discovery_path / "volumes").exists():
+            volumes = sorted(list_volume_backup_names(discovery_path))
+        if networks_dir.exists():
+            networks = sorted(f.stem for f in networks_dir.glob("*.json"))
+        if filesystems_dir.exists():
+            filesystems = sorted(f.name for f in filesystems_dir.iterdir() if f.is_dir())
+
+        return containers, volumes, networks, filesystems
+    finally:
+        if temp_root_to_remove is not None:
+            shutil.rmtree(temp_root_to_remove, ignore_errors=True)
 
 
 def _backup_encryption_result(status: BackupStatus, backup_path: Path) -> str:
@@ -470,17 +510,18 @@ def restore(
     containers_to_restore = None
     volumes_to_restore = None
     networks_to_restore = None
+    filesystems_to_restore = None
 
     if restore_all:
-        configs_dir = backup_path / "configs"
-        volumes_dir = backup_path / "volumes"
-        networks_dir = backup_path / "networks"
-        if configs_dir.exists():
-            containers_to_restore = [f.stem.replace("_config", "") for f in configs_dir.glob("*_config.json")]
-        if volumes_dir.exists():
-            volumes_to_restore = list_volume_backup_names(backup_path)
-        if networks_dir.exists():
-            networks_to_restore = [f.stem for f in networks_dir.glob("*.json")]
+        try:
+            (
+                containers_to_restore,
+                volumes_to_restore,
+                networks_to_restore,
+                filesystems_to_restore,
+            ) = _discover_restore_all_targets(backup_path, config)
+        except OSError as exc:
+            json_error("restore", str(exc), EXIT_USER_ERROR, output)
     else:
         if containers:
             containers_to_restore = list(containers)
@@ -488,8 +529,8 @@ def restore(
             volumes_to_restore = list(volumes)
         if networks:
             networks_to_restore = list(networks)
-
-    filesystems_to_restore = list(filesystem) if filesystem else None
+        if filesystem:
+            filesystems_to_restore = list(filesystem)
     fs_destination = Path(filesystem_destination) if filesystem_destination else None
 
     if not containers_to_restore and not volumes_to_restore and not networks_to_restore and not filesystems_to_restore:
@@ -516,6 +557,21 @@ def restore(
         if output != "json":
             console.print("[cyan]Dry-run: no restore executed.[/cyan]")
         sys.exit(EXIT_SUCCESS)
+
+    if filesystems_to_restore and fs_destination is None:
+        json_error(
+            "restore",
+            "Filesystem restore requires --filesystem-destination",
+            EXIT_USER_ERROR,
+            output,
+        )
+    if filesystems_to_restore and len(filesystems_to_restore) > 1:
+        json_error(
+            "restore",
+            "Restore one filesystem target at a time; multiple filesystem targets cannot share one destination",
+            EXIT_USER_ERROR,
+            output,
+        )
 
     if output != "json":
         console.print(f"[bold]Restoring from backup: {backup_path}[/bold]\n")

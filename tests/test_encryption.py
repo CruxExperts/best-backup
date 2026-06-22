@@ -149,7 +149,7 @@ class TestEncryptionManagerConstruction:
 
 class TestGitHubShortcutResolution:
     def test_github_prefix_triggers_head_calls(self, tmp_path):
-        """github:user format tries multiple URLs via requests.head."""
+        """github:user format tries standard repo URLs via requests.head."""
         cfg = EncryptionSettings(
             enabled=True,
             method="symmetric",
@@ -179,6 +179,27 @@ class TestGitHubShortcutResolution:
             EncryptionManager(cfg)
         # Verifies no exception was raised and head was called
         mock_head.assert_called()
+
+    def test_username_only_does_not_probe_gist_names(self):
+        """github:user does not try unsupported guessed Gist names."""
+        cfg = EncryptionSettings(
+            enabled=True,
+            method="symmetric",
+            symmetric={"key_file": "github:testuser"},
+        )
+
+        checked_urls = []
+
+        def head_side_effect(url, **kwargs):
+            checked_urls.append(url)
+            return MagicMock(status_code=404)
+
+        with patch("bbackup.encryption.requests.head", side_effect=head_side_effect):
+            mgr = EncryptionManager(cfg)
+
+        assert mgr.symmetric_key is None
+        assert checked_urls
+        assert not any("gist.githubusercontent.com" in url for url in checked_urls)
 
     def test_all_404_ssh_fallback(self):
         """All standard URLs 404; SSH keys endpoint checked as fallback."""

@@ -193,9 +193,8 @@ class EncryptionManager:
         
         Tries multiple strategies:
         1. If gist/repo specified, use that
-        2. Try standard gist name: bbackup-keys
-        3. Try standard repo: backup-keys or bbackup-keys
-        4. Try SSH keys endpoint (as fallback)
+        2. Try standard repo: backup-keys or bbackup-keys
+        3. Try SSH keys endpoint (as fallback)
         
         Args:
             shortcut: GitHub shortcut (e.g., "github:USERNAME")
@@ -220,14 +219,7 @@ class EncryptionManager:
             username, repo_name = username.split('/repo:', 1)
             return f"https://raw.githubusercontent.com/{username}/{repo_name}/main/backup_public.pem"
         
-        # Strategy 1: Try standard gist name "bbackup-keys"
-        # Note: We can't list gists via API without auth, so we'll try common patterns
-        standard_gist_urls = [
-            f"https://gist.githubusercontent.com/{username}/bbackup-keys/raw/backup_public.pem",
-            f"https://gist.githubusercontent.com/{username}/backup-keys/raw/backup_public.pem",
-        ]
-        
-        # Strategy 2: Try standard repository names
+        # Strategy 1: Try standard repository names.
         standard_repo_urls = [
             f"https://raw.githubusercontent.com/{username}/bbackup-keys/main/backup_public.pem",
             f"https://raw.githubusercontent.com/{username}/backup-keys/main/backup_public.pem",
@@ -236,7 +228,7 @@ class EncryptionManager:
         ]
         
         # Try all strategies in order
-        all_urls = standard_gist_urls + standard_repo_urls
+        all_urls = standard_repo_urls
         
         logger.info(f"Resolving GitHub shortcut: {shortcut}")
         logger.info(f"Trying {len(all_urls)} potential URLs...")
@@ -250,7 +242,7 @@ class EncryptionManager:
             except requests.RequestException:
                 continue
         
-        # Strategy 3: Fallback to SSH keys (inform user they need to convert)
+        # Strategy 2: Fallback to SSH keys (inform user they need to convert)
         logger.warning(f"Could not find standard key locations for {username}")
         logger.info("Trying SSH keys endpoint as fallback...")
         ssh_keys_url = f"https://github.com/{username}.keys"
@@ -267,10 +259,9 @@ class EncryptionManager:
         
         logger.error(f"Could not resolve GitHub shortcut: {shortcut}")
         logger.info("Suggestions:")
-        logger.info("  1. Create a gist named 'bbackup-keys' with your public key")
-        logger.info("  2. Create a repo named 'bbackup-keys' with backup_public.pem")
-        logger.info(f"  3. Use explicit format: github:{username}/gist:GIST_ID")
-        logger.info(f"  4. Use explicit format: github:{username}/repo:REPO_NAME")
+        logger.info("  1. Create a repo named 'bbackup-keys' with backup_public.pem")
+        logger.info(f"  2. Use explicit format: github:{username}/gist:GIST_ID")
+        logger.info(f"  3. Use explicit format: github:{username}/repo:REPO_NAME")
         
         return None
     

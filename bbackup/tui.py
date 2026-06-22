@@ -19,6 +19,7 @@ from rich.live import Live
 from rich.prompt import Confirm, Prompt
 from rich import box
 
+from . import __version__
 from .config import Config, BackupSet
 
 
@@ -142,7 +143,7 @@ class BackupTUI:
         """Display header panel."""
         header = Panel(
             f"[bold cyan]{title}[/bold cyan]\n"
-            f"[dim]Version 1.0.0 - Docker Backup & Restore[/dim]",
+            f"[dim]Version {__version__} - Docker Backup & Restore[/dim]",
             box=box.ROUNDED,
             border_style="cyan",
         )
@@ -211,7 +212,7 @@ class BackupTUI:
                 files_str = f" | Files: {self.status.files_transferred}"
         
         header_content = f"""
-[bold cyan]bbackup[/bold cyan] - Docker Backup Tool  [dim]v1.0.0[/dim]
+[bold cyan]bbackup[/bold cyan] - Docker Backup Tool  [dim]v{__version__}[/dim]
 Status: [{status_color}]{self.status.status.upper()}[/{status_color}]{elapsed}{eta_str}{speed_str}{bytes_str}{files_str}
 
 [bold]Current:[/bold] {self.status.current_action}

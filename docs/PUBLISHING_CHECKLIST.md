@@ -20,10 +20,12 @@ Use this checklist before making the repository public or cutting a release.
 - [ ] `.githooks/pre-push` runs version sync, generated-doc checks, and whitespace checks.
 - [ ] `.github/workflows/ci.yml` runs syntax, tests, CLI docs, version sync, support doc presence, and publishing readiness checks.
 - [ ] `.github/workflows/release-notes.yml` verifies the tag, builds with `uv build`, and creates a GitHub release from `v*` tags.
+- [ ] CI tests Python `3.12`, `3.13`, and `3.14`, matching the supported package classifiers.
 - [ ] CI and release workflows smoke test the installed wheel.
 - [ ] GitHub workflow actions are on current supported major versions.
 - [ ] GitHub workflows declare least-privilege `permissions`.
 - [ ] CI installs dependencies with `uv sync --locked` and runs commands with `uv run`.
+- [ ] Ruff covers the package, selected release scripts, generated CLI skill checker, and tests.
 
 ## Version and release state
 

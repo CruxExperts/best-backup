@@ -363,11 +363,11 @@ class TestDeleteBackup:
 
 
 # ---------------------------------------------------------------------------
-# TestParseBackupDate
+# TestParseSolidArchiveDate
 # ---------------------------------------------------------------------------
 
 
-class TestParseBackupDate:
+class TestParseSolidArchiveDate:
     def test_parse_strips_solid_archive_suffix(self):
         r = make_rotation()
         dt = r._parse_backup_date("backup_20240304_120000.tar.gz")

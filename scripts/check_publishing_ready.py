@@ -13,6 +13,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CANONICAL_REPO = "github.com/CruxExperts/best-backup"
 LEGACY_REPO = "github.com/cptnfren/best-backup"
+STALE_CHECKOUT_PATH = "/mnt/data/devzone/linuxtools/best-backup"
 PY_COMPILE_COMMAND = (
     "uv run python -m py_compile bbackup.py bbman.py bbackup/*.py "
     "bbackup/data/*.py bbackup/management/*.py scripts/*.py"
@@ -29,12 +30,12 @@ PY_COMPILE_TARGETS = (
 
 EXPECTED_ACTIONS = {
     ".github/workflows/ci.yml": [
-        "actions/checkout@v6",
+        "actions/checkout@v7",
         "actions/setup-python@v6",
         "actions/upload-artifact@v7",
     ],
     ".github/workflows/release-notes.yml": [
-        "actions/checkout@v6",
+        "actions/checkout@v7",
         "actions/setup-python@v6",
         "softprops/action-gh-release@v3",
     ],
@@ -48,7 +49,7 @@ PUBLIC_SCAN_ROOTS = [
     ".github",
     "bbackup",
     "docs",
-    "scripts/README.md",
+    "scripts",
     "README.md",
     "INSTALL.md",
     "QUICKSTART.md",
@@ -61,7 +62,7 @@ PUBLIC_SCAN_ROOTS = [
     "project.yaml",
 ]
 
-PUBLIC_EXTENSIONS = {".md", ".py", ".yaml", ".yml", ".toml", ".txt"}
+PUBLIC_EXTENSIONS = {".md", ".py", ".sh", ".yaml", ".yml", ".toml", ".txt"}
 
 
 def read(path: str) -> str:
@@ -152,8 +153,8 @@ def main() -> int:
     ci_workflow = read(".github/workflows/ci.yml")
     if "contents: read" not in ci_workflow:
         errors.append(".github/workflows/ci.yml must grant contents: read")
-    if "python-version: [\"3.12\", \"3.13\"]" not in ci_workflow:
-        errors.append(".github/workflows/ci.yml must test Python 3.12 and 3.13 only")
+    if "python-version: [\"3.12\", \"3.13\", \"3.14\"]" not in ci_workflow:
+        errors.append(".github/workflows/ci.yml must test Python 3.12, 3.13, and 3.14")
     if "uv sync --locked" not in ci_workflow or "uv run pytest" not in ci_workflow:
         errors.append(".github/workflows/ci.yml must install and test through uv")
     if "python -m pip install uv" not in ci_workflow:
@@ -169,8 +170,11 @@ def main() -> int:
     public_files = tracked_public_files()
     for path in public_files:
         text = read(str(path))
-        if LEGACY_REPO in text:
-            errors.append(f"{path} still references {LEGACY_REPO}")
+        if path != Path("scripts/check_publishing_ready.py"):
+            if LEGACY_REPO in text:
+                errors.append(f"{path} still references {LEGACY_REPO}")
+            if STALE_CHECKOUT_PATH in text:
+                errors.append(f"{path} still references stale checkout path {STALE_CHECKOUT_PATH}")
 
     for path in ("README.md", "INSTALL.md", "QUICKSTART.md", "SUPPORT.md"):
         if CANONICAL_REPO not in read(path):

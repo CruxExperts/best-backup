@@ -90,22 +90,22 @@ public_key: github:YOUR_USERNAME/gist:YOUR_GIST_ID
 # Explicit repo
 public_key: github:YOUR_USERNAME/repo:backup-keys
 
-# Username only - auto-discovery (tries standard locations)
+# Username only - repo lookup for standard backup key repos
 public_key: github:YOUR_USERNAME
 # or the shorter alias:
 public_key: gh:YOUR_USERNAME
 ```
 
-When you use the username-only form, bbackup tries these four URLs in order:
+For Gists, use the explicit Gist ID form. Gist descriptions and filenames are not stable IDs, so `bbackup-keys` and `backup-keys` are not reliable Gist lookup names.
+
+When you use the username-only form, bbackup can find public keys in standard repositories:
 
 ```
-https://gist.githubusercontent.com/USERNAME/bbackup-keys/raw/backup_public.pem
-https://gist.githubusercontent.com/USERNAME/backup-keys/raw/backup_public.pem
 https://raw.githubusercontent.com/USERNAME/bbackup-keys/main/backup_public.pem
 https://raw.githubusercontent.com/USERNAME/backup-keys/main/backup_public.pem
 ```
 
-So naming your Gist `bbackup-keys` or `backup-keys` and your key file `backup_public.pem` is all you need. Raw repo URL also works:
+Put `backup_public.pem` in a public `bbackup-keys` or `backup-keys` repository, or use an explicit raw URL:
 
 ```
 https://raw.githubusercontent.com/YOUR_USERNAME/REPO/main/backup_public.pem

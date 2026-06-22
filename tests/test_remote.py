@@ -6,7 +6,6 @@ Last Updated: 2026-02-26
 
 import shutil
 import textwrap
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from bbackup.config import Config, RemoteStorage

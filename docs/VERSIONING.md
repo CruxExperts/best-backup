@@ -68,7 +68,8 @@ git diff --check
 
 Pushing a tag that matches `v*` runs `.github/workflows/release-notes.yml`.
 The release job verifies that the tag matches `VERSION`, runs the version and
-publishing checks, runs Ruff, py_compile, generated-doc checks, pytest, builds
-release artifacts with `uv build`, smoke tests the built wheel, and creates a
-GitHub release from the matching `CHANGELOG.md` section. The release job fails
-if the matching changelog section is missing.
+publishing checks, runs Ruff across the package, selected release scripts, and
+tests, runs py_compile, generated-doc checks, pytest, builds release artifacts
+with `uv build`, smoke tests the built wheel, and creates a GitHub release from
+the matching `CHANGELOG.md` section. The release job fails if the matching
+changelog section is missing.

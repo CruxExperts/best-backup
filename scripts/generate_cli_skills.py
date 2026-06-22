@@ -18,8 +18,8 @@ from typing import Dict, List
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from bbackup import __version__ as BBACKUP_VERSION
-from bbackup.cli_metadata import CliCommand, get_command_registry
+from bbackup import __version__ as BBACKUP_VERSION  # noqa: E402
+from bbackup.cli_metadata import CliCommand, get_command_registry  # noqa: E402
 
 DOC_PATH = REPO_ROOT / "docs" / "cli-skills.md"
 INDEX_PATH = REPO_ROOT / "docs" / "cli-skills-index.json"

@@ -75,8 +75,10 @@ Fetches SSH public keys from a GitHub user profile.
 Uploads an encryption public key to a GitHub Gist.
 
 ```bash
-./scripts/upload_key_to_github.sh /path/to/backup_public.pem
+./scripts/upload_key_to_github.sh /path/to/backup_public.pem "bbackup encryption public key"
 ```
+
+The helper prints an explicit `github:USER/gist:GIST_ID` config value. Gist descriptions are labels only; username-only Gist-name discovery is not supported.
 
 ---
 

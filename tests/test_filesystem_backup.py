@@ -10,12 +10,8 @@ Created: 2026-02-27
 Last Updated: 2026-02-27
 """
 
-import os
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from bbackup.config import Config, FilesystemTarget
 from bbackup.filesystem_backup import FilesystemBackup
@@ -284,7 +280,7 @@ class TestRunRsync:
         mock_proc.wait.return_value = 2
 
         with patch("subprocess.Popen", return_value=mock_proc):
-            result = fb._run_rsync(["rsync", "src", "dst"], progress_callback=lambda l: None)
+            result = fb._run_rsync(["rsync", "src", "dst"], progress_callback=lambda _line: None)
 
         assert result is False
 
@@ -737,8 +733,6 @@ class TestBackupRunnerFilesystemLoop:
     def test_skip_current_marks_skipped(self, tmp_path, mock_docker_client):
         runner, status = self._make_runner_and_status(mock_docker_client)
         targets = [make_target(name="docs")]
-
-        original_backup_path = None
 
         def set_skip_before_backup(*args, **kwargs):
             # skip_current gets consumed by the filesystem loop on the next
