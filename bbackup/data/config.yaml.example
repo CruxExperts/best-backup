@@ -186,6 +186,59 @@ filesystem:
         excludes:
           - "*.log"
 
+# Native deduplicating snapshot profiles.
+# Restic encrypts content and metadata. Keep password files outside selected
+# backup paths, chmod 0600, and escrow the password out-of-band.
+snapshot_profiles:
+  essentials-daily:
+    engine: restic
+    host_id: SCAR01
+    repository: rclone:ALIEN001-GD:backups/SCAR01/restic/essentials-daily
+    cache_dir: ~/.cache/bbackup/restic/SCAR01/essentials-daily
+    state_dir: ~/.local/state/bbackup/SCAR01/essentials-daily
+    password_file: ~/.config/bbackup/restic/SCAR01/essentials-daily.password
+    retry_lock: 5m
+    repo_homes:
+      - /mnt/data/devzone
+      - /mnt/data/work
+    explicit_repos:
+      - /home/cptnfren/myrig
+    include_paths:
+      - ~/.codex
+      - ~/.config/opencode
+      - ~/.local/share/opencode
+      - ~/.local/state/opencode
+      - ~/.local/share/localsetup
+      - ~/.local/state/localsetup
+      - ~/.config/bbackup
+      - ~/.config/rclone
+      - ~/.config/systemd/user
+      - ~/.ssh
+      - ~/.pki
+      - ~/.gitconfig
+      - ~/.bashrc
+      - ~/.profile
+      - ~/.tmux.conf
+      - ~/.config/gh
+      - ~/Documents
+      - ~/Pictures
+    exclude_paths:
+      - /mnt/data/devzone/archives
+      - /mnt/data/devzone/starred-repos
+      - /mnt/data/devzone/migration-staging
+      - /mnt/data/google-drive
+      - ~/.cache
+      - "**/node_modules"
+      - "**/.venv"
+    retention:
+      active_repo_daily: 14
+      active_repo_weekly: 8
+      active_repo_monthly: 12
+    schedule:
+      daily_time: "03:30"
+      maintenance_time: "Sun 04:30"
+      verification_time: "monthly"
+
 # Docker Settings
 docker:
   socket: /var/run/docker.sock

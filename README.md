@@ -206,6 +206,53 @@ Or pass paths directly, no config needed:
 bbackup backup --paths /home/user/docs /srv/data --exclude "*.tmp"
 ```
 
+### Native restic snapshots
+
+Add a top-level `snapshot_profiles:` section for encrypted deduplicating restic
+snapshots. bbackup owns discovery, safety checks, state, and scheduling while
+restic owns the snapshot repository.
+
+```yaml
+snapshot_profiles:
+  essentials-daily:
+    engine: restic
+    host_id: SCAR01
+    repository: rclone:ALIEN001-GD:backups/SCAR01/restic/essentials-daily
+    cache_dir: ~/.cache/bbackup/restic/SCAR01/essentials-daily
+    state_dir: ~/.local/state/bbackup/SCAR01/essentials-daily
+    password_file: ~/.config/bbackup/restic/SCAR01/essentials-daily.password
+    repo_homes:
+      - /mnt/data/devzone
+      - /mnt/data/work
+    explicit_repos:
+      - /home/user/my-control-repo
+    include_paths:
+      - ~/.config/bbackup
+      - ~/Documents
+```
+
+The password file must stay outside selected backup paths and should be `0600`.
+Escrow the password outside the backup.
+
+Plan, initialize, run, check, restore, retire, purge-plan, and render schedule
+units with:
+
+```bash
+bbackup snapshot plan --profile essentials-daily --output json
+```
+
+```bash
+bbackup snapshot init --profile essentials-daily --dry-run --output json
+```
+
+```bash
+bbackup snapshot run --profile essentials-daily
+```
+
+Deleted Git repositories are marked retired only after at least one successful
+snapshot. Automated retention must target active repo IDs or configured path
+scopes; use `snapshot purge-plan` for dry-run-first retired-repo purges.
+
 ---
 
 ## CLI reference

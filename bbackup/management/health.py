@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..config import Config
+from ..snapshot import check_all_snapshot_profiles
 
 console = Console()
 
@@ -143,6 +144,7 @@ def run_health_check() -> Dict:
     Returns:
         Dict with health check results
     """
+    config = Config()
     results = {
         "docker": check_docker(),
         "docker_socket": check_docker_socket(),
@@ -152,6 +154,7 @@ def run_health_check() -> Dict:
         "python_packages": check_python_packages(),
         "config": check_config_file(),
         "directories": check_directories(),
+        "snapshot_profiles": check_all_snapshot_profiles(config),
     }
     
     # Calculate overall health
@@ -163,7 +166,8 @@ def run_health_check() -> Dict:
         results["python_packages"][0],
     ]
     
-    all_critical_ok = all(critical_checks)
+    snapshot_ok = results["snapshot_profiles"]["ok"]
+    all_critical_ok = all(critical_checks) and snapshot_ok
     overall_health = "healthy" if all_critical_ok else "unhealthy"
     
     results["overall"] = overall_health
@@ -213,6 +217,17 @@ def display_health_report(results: Dict):
     else:
         for issue in dir_issues:
             table.add_row("Directories", "[yellow]⚠[/yellow]", issue)
+
+    # Snapshot profile checks
+    snapshot_profiles = results.get("snapshot_profiles", {}).get("profiles", {})
+    for profile_name, profile_result in snapshot_profiles.items():
+        status = "[green]✓[/green]" if profile_result.get("ok") else "[red]✗[/red]"
+        failed = [
+            name for name, check in profile_result.get("checks", {}).items()
+            if not check.get("ok")
+        ]
+        detail = "ready" if not failed else f"failed: {', '.join(failed)}"
+        table.add_row(f"Snapshot profile: {profile_name}", status, detail)
     
     console.print(table)
     
@@ -246,6 +261,11 @@ def generate_health_report(results: Dict) -> str:
             msg = result[1]
         status = "✓" if ok else "✗"
         report.append(f"{status} {check_name}: {msg}")
+
+    snapshot_profiles = results.get("snapshot_profiles", {}).get("profiles", {})
+    for profile_name, profile_result in snapshot_profiles.items():
+        status = "✓" if profile_result.get("ok") else "✗"
+        report.append(f"{status} Snapshot profile {profile_name}: {'ready' if profile_result.get('ok') else 'not ready'}")
     
     report.append("")
     report.append(f"Overall Status: {results['overall'].upper()}")
