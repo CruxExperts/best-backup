@@ -220,7 +220,7 @@ snapshot_profiles:
     repository: rclone:ALIEN001-GD:backups/SCAR01/restic/essentials-daily
     cache_dir: ~/.cache/bbackup/restic/SCAR01/essentials-daily
     state_dir: ~/.local/state/bbackup/SCAR01/essentials-daily
-    password_file: ~/.config/bbackup/restic/SCAR01/essentials-daily.password
+    password_file: ~/.local/share/bbackup-credentials/restic/SCAR01/essentials-daily.password
     repo_homes:
       - /mnt/data/devzone
       - /mnt/data/work

@@ -16,6 +16,7 @@ from bbackup.snapshot import (
     reconcile_repos,
     retire_repo,
     snapshot_plan,
+    state_file,
 )
 
 
@@ -100,6 +101,19 @@ def test_discover_git_repos_uses_immediate_children_and_explicit_roots(tmp_path)
     assert str((tmp_path / "repos" / "repo-a").resolve()) in paths
     assert str((tmp_path / "myrig").resolve()) in paths
     assert str((tmp_path / "repos" / "not-git").resolve()) not in paths
+
+
+def test_discover_git_repos_skips_excluded_repo_home_children(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    profile.exclude_paths.append(f"{tmp_path}/repos/starred-repos")
+    init_git_repo(tmp_path / "repos" / "repo-a")
+    init_git_repo(tmp_path / "repos" / "starred-repos")
+
+    discovered = discover_git_repos(profile)
+    paths = {repo.path for repo in discovered}
+    assert str((tmp_path / "repos" / "repo-a").resolve()) in paths
+    assert str((tmp_path / "repos" / "starred-repos").resolve()) not in paths
 
 
 def test_reconcile_marks_deleted_repo_retired_only_after_snapshot(tmp_path):
@@ -200,6 +214,17 @@ def test_snapshot_plan_cli_json(tmp_path):
     data = json.loads(result.output)
     assert data["success"] is True
     assert data["data"]["repos"][0]["repo_id"]
+
+
+def test_snapshot_plan_does_not_persist_state(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    init_git_repo(tmp_path / "repos" / "repo-a")
+
+    plan = snapshot_plan(profile)
+
+    assert plan["repos"]
+    assert not state_file(profile).exists()
 
 
 def test_snapshot_init_dry_run_cli_json(tmp_path):

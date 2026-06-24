@@ -10,6 +10,7 @@ import shutil
 import socket
 import stat
 import subprocess
+from fnmatch import fnmatch
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -124,18 +125,33 @@ def discover_git_repos(profile: SnapshotProfile) -> List[DiscoveredRepo]:
         for child in sorted(home_path.iterdir(), key=lambda p: p.name):
             if not child.is_dir():
                 continue
+            if _is_excluded_path(child, profile.exclude_paths):
+                continue
             repo = _repo_from_path(child)
             if repo:
                 repos[repo.path] = repo
     for explicit in profile.explicit_repos:
         path = expand_path(explicit)
+        if _is_excluded_path(path, profile.exclude_paths):
+            continue
         repo = _repo_from_path(path)
         if repo:
             repos[repo.path] = repo
     return list(repos.values())
 
 
-def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo]) -> Dict[str, Any]:
+def _is_excluded_path(path: Path, exclude_paths: Iterable[str]) -> bool:
+    resolved = str(path.resolve())
+    for raw_pattern in exclude_paths:
+        pattern = str(expand_path(raw_pattern)) if raw_pattern.startswith(("~", "/", "$")) else raw_pattern
+        if resolved == pattern or resolved.startswith(pattern.rstrip("/") + "/"):
+            return True
+        if fnmatch(resolved, pattern) or fnmatch(path.name, pattern):
+            return True
+    return False
+
+
+def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo], save: bool = True) -> Dict[str, Any]:
     state = load_state(profile)
     repos = state.setdefault("repos", {})
     alerts: List[Dict[str, str]] = []
@@ -188,7 +204,8 @@ def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo]) 
             })
 
     state["alerts"] = alerts
-    save_state(profile, state)
+    if save:
+        save_state(profile, state)
     return {
         "profile": profile.name,
         "state_file": str(state_file(profile)),
@@ -290,9 +307,9 @@ def common_tags(profile: SnapshotProfile, scope: str, extra: Iterable[str] = ())
     ]
 
 
-def snapshot_plan(profile: SnapshotProfile) -> Dict[str, Any]:
+def _snapshot_plan(profile: SnapshotProfile, save: bool) -> Dict[str, Any]:
     discovered = discover_git_repos(profile)
-    reconcile = reconcile_repos(profile, discovered)
+    reconcile = reconcile_repos(profile, discovered, save=save)
     runner = ResticRunner(profile)
     repo_commands = [
         {
@@ -324,6 +341,10 @@ def snapshot_plan(profile: SnapshotProfile) -> Dict[str, Any]:
     }
 
 
+def snapshot_plan(profile: SnapshotProfile) -> Dict[str, Any]:
+    return _snapshot_plan(profile, save=False)
+
+
 def path_id(path: str) -> str:
     return hashlib.sha256(str(expand_path(path)).encode("utf-8")).hexdigest()[:16]
 
@@ -351,7 +372,7 @@ def snapshot_init(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, 
 
 
 def snapshot_run(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, Any]:
-    plan = snapshot_plan(profile)
+    plan = _snapshot_plan(profile, save=not dry_run)
     if dry_run:
         plan["dry_run"] = True
         return plan
