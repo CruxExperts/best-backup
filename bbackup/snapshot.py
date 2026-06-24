@@ -519,6 +519,7 @@ def check_snapshot_profile(profile: SnapshotProfile) -> Dict[str, Any]:
         "ok": True,
         "message": "not required for non-rclone repository",
     }
+    checks["rclone_drive_client_id"] = _rclone_drive_client_id_check(profile)
     checks["repository"] = {"ok": bool(profile.repository), "message": profile.repository or "missing"}
     checks["hostname"] = _hostname_check(profile)
     checks["password_file"] = _password_file_check(profile)
@@ -550,6 +551,54 @@ def _tool_check(name: str) -> Dict[str, Any]:
     except (OSError, subprocess.TimeoutExpired):
         version = found
     return {"ok": True, "message": version}
+
+
+def _rclone_remote_name(repository: str) -> Optional[str]:
+    if not repository.startswith("rclone:"):
+        return None
+    parts = repository.split(":", 2)
+    if len(parts) < 3 or not parts[1]:
+        return None
+    return parts[1]
+
+
+def _rclone_drive_client_id_check(profile: SnapshotProfile) -> Dict[str, Any]:
+    remote_name = _rclone_remote_name(profile.repository)
+    if not remote_name:
+        return {"ok": True, "message": "not required for non-rclone repository"}
+    if not shutil.which("rclone"):
+        return {"ok": False, "message": "rclone not found in PATH"}
+    try:
+        result = subprocess.run(
+            ["rclone", "config", "show", remote_name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "message": f"could not inspect rclone remote {remote_name}: {exc}"}
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        return {"ok": False, "message": f"could not inspect rclone remote {remote_name}: {detail}"}
+
+    fields: Dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        fields[key.strip()] = value.strip()
+    if fields.get("type") != "drive":
+        return {"ok": True, "message": f"rclone remote {remote_name} type {fields.get('type', 'unknown')}"}
+    if fields.get("client_id"):
+        return {"ok": True, "message": f"Google Drive remote {remote_name} has client_id configured"}
+    return {
+        "ok": False,
+        "message": (
+            f"Google Drive remote {remote_name} has no client_id; configure a dedicated "
+            "OAuth client before treating this snapshot profile as reliable"
+        ),
+    }
 
 
 def _hostname_check(profile: SnapshotProfile) -> Dict[str, Any]:

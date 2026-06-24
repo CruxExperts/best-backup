@@ -256,3 +256,44 @@ def test_snapshot_health_reports_profile_dependencies(tmp_path):
     assert result["ok"] is True
     assert result["checks"]["restic"]["ok"] is True
     assert result["checks"]["rclone"]["ok"] is True
+
+
+def test_snapshot_health_rejects_google_drive_remote_without_client_id(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+
+    def run_side_effect(args, **kwargs):
+        if args[:3] == ["rclone", "config", "show"]:
+            return MagicMock(returncode=0, stdout="[ALIEN001-GD]\ntype = drive\nscope = drive\n", stderr="")
+        return MagicMock(returncode=0, stdout="restic 0.19.0\n", stderr="")
+
+    with patch("bbackup.snapshot.shutil.which", return_value="/usr/bin/tool"), \
+         patch("bbackup.snapshot.socket.gethostname", return_value="test-host"), \
+         patch("bbackup.snapshot.subprocess.run", side_effect=run_side_effect):
+        result = check_snapshot_profile(profile)
+
+    assert result["ok"] is False
+    assert result["checks"]["rclone_drive_client_id"]["ok"] is False
+    assert "no client_id" in result["checks"]["rclone_drive_client_id"]["message"]
+
+
+def test_snapshot_health_accepts_google_drive_remote_with_client_id(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+
+    def run_side_effect(args, **kwargs):
+        if args[:3] == ["rclone", "config", "show"]:
+            return MagicMock(
+                returncode=0,
+                stdout="[ALIEN001-GD]\ntype = drive\nclient_id = example.apps.googleusercontent.com\n",
+                stderr="",
+            )
+        return MagicMock(returncode=0, stdout="restic 0.19.0\n", stderr="")
+
+    with patch("bbackup.snapshot.shutil.which", return_value="/usr/bin/tool"), \
+         patch("bbackup.snapshot.socket.gethostname", return_value="test-host"), \
+         patch("bbackup.snapshot.subprocess.run", side_effect=run_side_effect):
+        result = check_snapshot_profile(profile)
+
+    assert result["ok"] is True
+    assert result["checks"]["rclone_drive_client_id"]["ok"] is True
