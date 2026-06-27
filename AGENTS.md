@@ -76,3 +76,9 @@ git diff --check
 - Prefer updating existing docs over creating new documents.
 - Keep command examples copy-ready and avoid documenting machine-specific
   secrets or private paths unless they are explicitly local runtime examples.
+
+## Agent Client Compatibility
+
+- Codex CLI and OpenCode are both supported agent clients for this repo.
+- Root `AGENTS.md` is the shared instruction surface for both tools.
+- Keep Codex-only behavior in Codex-native surfaces and OpenCode-only behavior in OpenCode-native surfaces.
