@@ -31,6 +31,7 @@ from .logging import setup_logging
 from .encryption import EncryptionManager
 from .snapshot import (
     SnapshotError,
+    expand_path,
     purge_plan,
     retire_repo,
     schedule_units,
@@ -599,7 +600,7 @@ def snapshot_restore_cmd(ctx, profile, snapshot_id, target, include_path, output
     config: Config = ctx.obj["config"]
     console: Console = ctx.obj["console"]
     snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
-    target_path = Path(target).expanduser()
+    target_path = expand_path(target)
     if not dry_run and target_path.exists() and any(target_path.iterdir()):
         json_error("snapshot restore", f"Restore target is not empty: {target}", EXIT_USER_ERROR, output)
     try:
@@ -672,7 +673,7 @@ def snapshot_schedule_cmd(ctx, profile, output, input_json):
     config: Config = ctx.obj["config"]
     console: Console = ctx.obj["console"]
     snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
-    result = {"profile": profile, "units": schedule_units(snapshot_profile)}
+    result = {"profile": profile, "units": schedule_units(snapshot_profile, config_path=config.config_path)}
     _snapshot_result("snapshot schedule", result, output, console)
 
 

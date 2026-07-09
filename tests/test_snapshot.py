@@ -19,6 +19,7 @@ from bbackup.snapshot import (
     save_state,
     snapshot_check,
     snapshot_plan,
+    snapshot_run,
     state_file,
 )
 
@@ -96,6 +97,24 @@ def test_restic_backup_args_include_required_flags(tmp_path):
     assert "test-host" in args
     assert "--tag" in args
     assert "--exclude" in args
+
+
+def test_restic_backup_args_expand_path_based_excludes(tmp_path, monkeypatch):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    monkeypatch.setenv("BBACKUP_EXCLUDE_ROOT", str(tmp_path / "cache-root"))
+    profile.exclude_paths = ["$BBACKUP_EXCLUDE_ROOT/cache", "~/CloudDrive", "node_modules"]
+
+    args = ResticRunner(profile).backup_args("/tmp/source", ["bbackup"])
+    exclude_values = [
+        args[index + 1]
+        for index, value in enumerate(args)
+        if value == "--exclude"
+    ]
+
+    assert str((tmp_path / "cache-root" / "cache").resolve()) in exclude_values
+    assert "node_modules" in exclude_values
+    assert not any(value.startswith("$BBACKUP_EXCLUDE_ROOT") for value in exclude_values)
 
 
 def test_discover_git_repos_uses_immediate_children_and_explicit_roots(tmp_path):
@@ -176,6 +195,34 @@ def test_path_reuse_with_different_fingerprint_alerts(tmp_path):
     save_state(profile, state)
 
     result = reconcile_repos(profile, discovered)
+    assert result["alerts"][0]["code"] == "path_reuse_conflict"
+
+
+def test_no_origin_retired_path_reuse_alerts_after_reinit(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    repo_path = tmp_path / "repos" / "repo-a"
+    init_git_repo(repo_path)
+    first = reconcile_repos(profile, discover_git_repos(profile))
+    repo_id = first["active_repo_ids"][0]
+    state = load_state(profile)
+    state["repos"][repo_id]["status"] = "retired"
+    state["repos"][repo_id]["successful_snapshot_ids"] = ["abc123"]
+    save_state(profile, state)
+
+    import shutil
+    import subprocess
+
+    shutil.rmtree(repo_path)
+    repo_path.mkdir(parents=True)
+    (repo_path / "README.md").write_text("different repo\n")
+    subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_path), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(repo_path), "add", "README.md"], check=True)
+    subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "different"], check=True, capture_output=True)
+    result = reconcile_repos(profile, discover_git_repos(profile))
+
     assert result["alerts"][0]["code"] == "path_reuse_conflict"
 
 
@@ -410,6 +457,58 @@ def test_snapshot_command_missing_json_required_param_returns_json_error(tmp_pat
     assert "Missing required option: --snapshot-id" in data["errors"][0]
 
 
+def test_snapshot_restore_env_target_guard_uses_expanded_path(tmp_path, monkeypatch):
+    cfg_file = write_snapshot_config(tmp_path)
+    target = tmp_path / "restore-target"
+    target.mkdir()
+    (target / "existing.txt").write_text("existing\n")
+    monkeypatch.setenv("RESTORE_TARGET", str(target))
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config", str(cfg_file),
+            "snapshot", "restore",
+            "--profile", "essentials-daily",
+            "--snapshot-id", "latest",
+            "--target", "$RESTORE_TARGET",
+            "--output", "json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    data = json.loads(result.output)
+    assert "Restore target is not empty" in data["errors"][0]
+
+
+def test_snapshot_run_dry_run_reports_alerts_as_unsuccessful(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    init_git_repo(tmp_path / "repos" / "repo-a")
+    reconcile_repos(profile, discover_git_repos(profile))
+
+    import shutil
+
+    shutil.rmtree(tmp_path / "repos" / "repo-a")
+    result = snapshot_run(profile, dry_run=True)
+
+    assert result["success"] is False
+    assert result["alerts"][0]["code"] == "missing_without_snapshot"
+
+
+def test_snapshot_run_dry_run_reports_no_targets_as_unsuccessful(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    profile.repo_homes = []
+    profile.explicit_repos = []
+    profile.include_paths = []
+
+    result = snapshot_run(profile, dry_run=True)
+
+    assert result["success"] is False
+    assert result["alerts"] == []
+
+
 def test_snapshot_health_reports_profile_dependencies(tmp_path):
     cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
     profile = cfg.snapshot_profiles["essentials-daily"]
@@ -481,6 +580,22 @@ def test_snapshot_health_accepts_default_drive_client_when_profile_allows_it(tmp
     assert result["ok"] is True
     assert result["checks"]["rclone_drive_client_id"]["ok"] is True
     assert "explicit profile configuration" in result["checks"]["rclone_drive_client_id"]["message"]
+
+
+def test_snapshot_health_reports_unsupported_engine_without_crashing(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    profile.engine = "unknown"
+
+    with patch("bbackup.snapshot.shutil.which", return_value="/usr/bin/tool"), \
+         patch("bbackup.snapshot.socket.gethostname", return_value="test-host"), \
+         patch("bbackup.snapshot.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="restic 0.19.0\n", stderr="")
+        result = check_snapshot_profile(profile)
+
+    assert result["ok"] is False
+    assert result["checks"]["engine"]["ok"] is False
+    assert result["checks"]["repository_initialized"]["message"] == "unsupported snapshot engine"
 
 
 def test_snapshot_check_enforces_google_drive_client_id_or_opt_in(tmp_path):
@@ -565,7 +680,7 @@ def test_schedule_units_include_matching_services_for_all_timers(tmp_path):
     profile = cfg.snapshot_profiles["essentials-daily"]
     from bbackup.snapshot import schedule_units
 
-    units = schedule_units(profile)
+    units = schedule_units(profile, config_path=str(tmp_path / "custom-config.yaml"))
 
     assert "bbackup-test-host-essentials-daily.service" in units
     assert "bbackup-test-host-essentials-daily.timer" in units
@@ -573,7 +688,10 @@ def test_schedule_units_include_matching_services_for_all_timers(tmp_path):
     assert "bbackup-test-host-essentials-daily-maintenance.timer" in units
     assert "bbackup-test-host-essentials-daily-verification.service" in units
     assert "bbackup-test-host-essentials-daily-verification.timer" in units
-    assert "snapshot run --profile essentials-daily" in units["bbackup-test-host-essentials-daily.service"]
+    assert "--config" in units["bbackup-test-host-essentials-daily.service"]
+    assert "custom-config.yaml snapshot run --profile essentials-daily" in units[
+        "bbackup-test-host-essentials-daily.service"
+    ]
     assert "snapshot check --profile essentials-daily\n" in units[
         "bbackup-test-host-essentials-daily-maintenance.service"
     ]

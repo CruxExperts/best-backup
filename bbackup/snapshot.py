@@ -105,7 +105,8 @@ def _repo_from_path(path: Path) -> Optional[DiscoveredRepo]:
     origin = _git(root, ["config", "--get", "remote.origin.url"]) or ""
     head = _git(root, ["rev-parse", "HEAD"]) or ""
     git_dir = _git(root, ["rev-parse", "--git-dir"]) or ""
-    fingerprint_source = "\n".join([str(root), origin, git_dir])
+    root_commit = _git(root, ["rev-list", "--max-parents=0", "HEAD"]) or ""
+    fingerprint_source = "\n".join([str(root), origin, git_dir, root_commit])
     fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
     repo_id = hashlib.sha256(f"{origin or root}:{fingerprint}".encode("utf-8")).hexdigest()[:16]
     legacy_fingerprint_source = "\n".join([str(root), origin, head, git_dir])
@@ -316,7 +317,7 @@ class ResticRunner:
         for tag in tags:
             args.extend(["--tag", tag])
         for exclude in self.profile.exclude_paths:
-            args.extend(["--exclude", exclude])
+            args.extend(["--exclude", _restic_exclude_arg(exclude)])
         return args
 
     def restore_args(self, snapshot_id: str, target: str, include: Optional[str] = None) -> List[str]:
@@ -358,6 +359,12 @@ def common_tags(profile: SnapshotProfile, scope: str, extra: Iterable[str] = ())
         *profile.tags,
         *list(extra),
     ]
+
+
+def _restic_exclude_arg(pattern: str) -> str:
+    if pattern.startswith(("~", "/", "$")):
+        return str(expand_path(pattern))
+    return pattern
 
 
 def _snapshot_plan(profile: SnapshotProfile, save: bool) -> Dict[str, Any]:
@@ -429,11 +436,15 @@ def snapshot_run(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, A
     if not dry_run:
         _require_snapshot_operation_preflight(profile)
     plan = _snapshot_plan(profile, save=not dry_run)
+    has_targets = bool(plan["repos"] or plan["paths"])
     if dry_run:
+        plan["success"] = not bool(plan["alerts"]) and has_targets
         plan["dry_run"] = True
         return plan
     if plan["alerts"]:
         raise SnapshotError("Refusing to run snapshot profile with critical alerts")
+    if not has_targets:
+        raise SnapshotError("Refusing to run snapshot profile with no repositories or paths")
     runner = ResticRunner(profile)
     results = []
     for item in [*plan["repos"], *plan["paths"]]:
@@ -515,33 +526,34 @@ def purge_plan(profile: SnapshotProfile, repo_id: str) -> Dict[str, Any]:
     }
 
 
-def schedule_units(profile: SnapshotProfile) -> Dict[str, str]:
+def schedule_units(profile: SnapshotProfile, config_path: Optional[str] = None) -> Dict[str, str]:
     service_name = f"bbackup-{profile.host_id.lower()}-{profile.name}"
     schedule = profile.schedule or {}
     daily_time = schedule.get("daily_time", "03:30")
     maintenance_time = schedule.get("maintenance_time", "Sun 04:30")
     verification_time = schedule.get("verification_time", "monthly")
     verification_read_data_subset = _systemd_exec_arg(str(schedule.get("verification_read_data_subset", "5%")))
+    config_args = f" --config {shlex.quote(config_path)}" if config_path else ""
     unit = f"""[Unit]
 Description=bbackup {profile.host_id} {profile.name} snapshot
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/env bbackup snapshot run --profile {shlex.quote(profile.name)}
+ExecStart=/usr/bin/env bbackup{config_args} snapshot run --profile {shlex.quote(profile.name)}
 """
     maintenance_service = f"""[Unit]
 Description=bbackup {profile.host_id} {profile.name} weekly maintenance
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/env bbackup snapshot check --profile {shlex.quote(profile.name)}
+ExecStart=/usr/bin/env bbackup{config_args} snapshot check --profile {shlex.quote(profile.name)}
 """
     verification_service = f"""[Unit]
 Description=bbackup {profile.host_id} {profile.name} monthly verification
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/env bbackup snapshot check --profile {shlex.quote(profile.name)} --read-data-subset {shlex.quote(verification_read_data_subset)}
+ExecStart=/usr/bin/env bbackup{config_args} snapshot check --profile {shlex.quote(profile.name)} --read-data-subset {shlex.quote(verification_read_data_subset)}
 """
     timer = f"""[Unit]
 Description=Run bbackup {profile.host_id} {profile.name} snapshot daily
@@ -606,7 +618,16 @@ def check_snapshot_profile(profile: SnapshotProfile) -> Dict[str, Any]:
     checks["password_file"] = _password_file_check(profile)
     checks["cache_dir"] = _dir_check(profile.cache_dir, create=False)
     checks["state_dir"] = _dir_check(profile.state_dir, create=False)
-    checks["repository_initialized"] = _repository_initialized_check(profile)
+    if checks["engine"]["ok"]:
+        try:
+            checks["repository_initialized"] = _repository_initialized_check(profile)
+        except SnapshotError as exc:
+            checks["repository_initialized"] = {"ok": False, "message": str(exc)}
+    else:
+        checks["repository_initialized"] = {
+            "ok": False,
+            "message": "unsupported snapshot engine",
+        }
     ok = all(check["ok"] for check in checks.values())
     return {"ok": ok, "profile": profile.name, "checks": checks}
 

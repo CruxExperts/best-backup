@@ -144,7 +144,18 @@ def run_health_check() -> Dict:
     Returns:
         Dict with health check results
     """
-    config = Config()
+    config_error = ""
+    try:
+        config = Config()
+        snapshot_profiles = check_all_snapshot_profiles(config)
+    except Exception as exc:
+        config = None
+        config_error = str(exc)
+        snapshot_profiles = {
+            "ok": False,
+            "profiles": {},
+            "error": f"Could not load config for snapshot health checks: {exc}",
+        }
     results = {
         "docker": check_docker(),
         "docker_socket": check_docker_socket(),
@@ -154,8 +165,10 @@ def run_health_check() -> Dict:
         "python_packages": check_python_packages(),
         "config": check_config_file(),
         "directories": check_directories(),
-        "snapshot_profiles": check_all_snapshot_profiles(config),
+        "snapshot_profiles": snapshot_profiles,
     }
+    if config_error and results["config"][0]:
+        results["config"] = (False, f"Config file invalid: {config_error}")
     
     # Calculate overall health
     critical_checks = [
