@@ -12,6 +12,30 @@ current uv-based install, development, and release instructions.
 
 ---
 
+## [1.8.5] - 2026-07-09
+
+### Added
+
+- Native restic snapshot profiles with commands for `snapshot init`, `snapshot run`, `snapshot check`, `snapshot restore`, `snapshot retire`, `snapshot purge-plan`, and `snapshot schedule`.
+- Local restic integration coverage that initializes a temporary repository, snapshots a Git repo, checks the repository, restores content, and verifies the state ledger snapshot ID.
+- Profile schedule rendering for daily backup, weekly non-destructive maintenance checks, and monthly verification checks with configurable `verification_read_data_subset`.
+
+### Changed
+
+- Snapshot schedule units now render matching service/timer pairs, use `/usr/bin/env bbackup`, and escape systemd percent specifiers.
+- Retired-repo destructive cleanup remains dry-run-first/manual through `snapshot purge-plan`.
+- The pytest `integration` marker now covers external-tool integration tests such as Docker and restic.
+
+### Fixed
+
+- Google Drive rclone snapshot profiles without a dedicated `client_id` remain rejected by default, while `allow_default_rclone_drive_client: true` provides a conservative profile-local opt-in.
+- Non-dry snapshot operations now enforce the rclone Drive client preflight before running restic.
+- Git repo identity no longer changes on every commit; legacy head-derived repo IDs migrate safely, and unknown active same-path identity conflicts block history merging.
+- `list-backups` and restore dry-run planning no longer initialize Docker for file-only planning paths.
+- Restore dry-runs now validate filesystem destination and multi-filesystem constraints before returning a success plan.
+
+---
+
 ## [1.8.4] - 2026-06-22
 
 ### Security
@@ -270,7 +294,8 @@ current uv-based install, development, and release instructions.
 
 ---
 
-[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.8.4...HEAD
+[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.8.5...HEAD
+[1.8.5]: https://github.com/CruxExperts/best-backup/compare/v1.8.4...v1.8.5
 [1.8.4]: https://github.com/CruxExperts/best-backup/compare/v1.8.3...v1.8.4
 [1.8.3]: https://github.com/CruxExperts/best-backup/compare/v1.8.2...v1.8.3
 [1.8.2]: https://github.com/CruxExperts/best-backup/compare/v1.8.1...v1.8.2
