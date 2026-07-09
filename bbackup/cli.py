@@ -127,6 +127,13 @@ def _snapshot_profile_or_exit(config: Config, profile: str, output: str):
     return snapshot_profile
 
 
+def _snapshot_required_param(ctx: click.Context, name: str, command: str, output: str):
+    value = ctx.params.get(name)
+    if value in (None, ""):
+        json_error(command, f"Missing required option: --{name.replace('_', '-')}", EXIT_USER_ERROR, output)
+    return value
+
+
 def _snapshot_result(command: str, result: dict, output: str, console: Console) -> None:
     success = bool(result.get("success", result.get("ok", True)))
     render_output(result, output, command, success=success)
@@ -483,13 +490,15 @@ def snapshot():
 
 
 @snapshot.command("plan")
-@click.option("--profile", "-p", required=True, help="Snapshot profile name")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
 @output_option
 @input_json_option
 @click.pass_context
 def snapshot_plan_cmd(ctx, profile, output, input_json):
     """Resolve a snapshot profile without executing restic."""
     merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot plan", output)
     config: Config = ctx.obj["config"]
     console: Console = ctx.obj["console"]
     snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
@@ -504,7 +513,7 @@ def snapshot_plan_cmd(ctx, profile, output, input_json):
 
 
 @snapshot.command("init")
-@click.option("--profile", "-p", required=True, help="Snapshot profile name")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
 @output_option
 @input_json_option
 @dry_run_option
@@ -512,6 +521,9 @@ def snapshot_plan_cmd(ctx, profile, output, input_json):
 def snapshot_init_cmd(ctx, profile, output, input_json, dry_run):
     """Initialize the restic repository for a snapshot profile."""
     merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    dry_run = ctx.params.get("dry_run", dry_run)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot init", output)
     config: Config = ctx.obj["config"]
     console: Console = ctx.obj["console"]
     snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
@@ -522,7 +534,7 @@ def snapshot_init_cmd(ctx, profile, output, input_json, dry_run):
 
 
 @snapshot.command("run")
-@click.option("--profile", "-p", required=True, help="Snapshot profile name")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
 @output_option
 @input_json_option
 @dry_run_option
@@ -530,6 +542,9 @@ def snapshot_init_cmd(ctx, profile, output, input_json, dry_run):
 def snapshot_run_cmd(ctx, profile, output, input_json, dry_run):
     """Run a native snapshot profile."""
     merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    dry_run = ctx.params.get("dry_run", dry_run)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot run", output)
     config: Config = ctx.obj["config"]
     console: Console = ctx.obj["console"]
     snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
@@ -540,7 +555,7 @@ def snapshot_run_cmd(ctx, profile, output, input_json, dry_run):
 
 
 @snapshot.command("check")
-@click.option("--profile", "-p", required=True, help="Snapshot profile name")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
 @click.option("--read-data-subset", default=None, help="Pass through to restic check")
 @output_option
 @input_json_option
@@ -549,6 +564,10 @@ def snapshot_run_cmd(ctx, profile, output, input_json, dry_run):
 def snapshot_check_cmd(ctx, profile, read_data_subset, output, input_json, dry_run):
     """Check a native snapshot repository."""
     merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    dry_run = ctx.params.get("dry_run", dry_run)
+    read_data_subset = ctx.params.get("read_data_subset", read_data_subset)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot check", output)
     config: Config = ctx.obj["config"]
     console: Console = ctx.obj["console"]
     snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
@@ -560,9 +579,9 @@ def snapshot_check_cmd(ctx, profile, read_data_subset, output, input_json, dry_r
 
 
 @snapshot.command("restore")
-@click.option("--profile", "-p", required=True, help="Snapshot profile name")
-@click.option("--snapshot-id", required=True, help="Restic snapshot ID to restore")
-@click.option("--target", required=True, type=click.Path(), help="Empty restore target directory")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@click.option("--snapshot-id", required=False, help="Restic snapshot ID to restore")
+@click.option("--target", required=False, type=click.Path(), help="Empty restore target directory")
 @click.option("--include", "include_path", default=None, help="Optional restic include filter")
 @output_option
 @input_json_option
@@ -571,6 +590,12 @@ def snapshot_check_cmd(ctx, profile, read_data_subset, output, input_json, dry_r
 def snapshot_restore_cmd(ctx, profile, snapshot_id, target, include_path, output, input_json, dry_run):
     """Restore a restic snapshot into a target directory."""
     merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    dry_run = ctx.params.get("dry_run", dry_run)
+    include_path = ctx.params.get("include_path", include_path)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot restore", output)
+    snapshot_id = _snapshot_required_param(ctx, "snapshot_id", "snapshot restore", output)
+    target = _snapshot_required_param(ctx, "target", "snapshot restore", output)
     config: Config = ctx.obj["config"]
     console: Console = ctx.obj["console"]
     snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
@@ -591,14 +616,17 @@ def snapshot_restore_cmd(ctx, profile, snapshot_id, target, include_path, output
 
 
 @snapshot.command("retire")
-@click.option("--profile", "-p", required=True, help="Snapshot profile name")
-@click.option("--repo-id", required=True, help="Repo ID to mark retired")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@click.option("--repo-id", required=False, help="Repo ID to mark retired")
 @output_option
 @input_json_option
 @click.pass_context
 def snapshot_retire_cmd(ctx, profile, repo_id, output, input_json):
     """Manually mark a repo as retired after it has a successful snapshot."""
     merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot retire", output)
+    repo_id = _snapshot_required_param(ctx, "repo_id", "snapshot retire", output)
     config: Config = ctx.obj["config"]
     console: Console = ctx.obj["console"]
     snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
@@ -610,14 +638,17 @@ def snapshot_retire_cmd(ctx, profile, repo_id, output, input_json):
 
 
 @snapshot.command("purge-plan")
-@click.option("--profile", "-p", required=True, help="Snapshot profile name")
-@click.option("--repo-id", required=True, help="Retired repo ID to plan for purge")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@click.option("--repo-id", required=False, help="Retired repo ID to plan for purge")
 @output_option
 @input_json_option
 @click.pass_context
 def snapshot_purge_plan_cmd(ctx, profile, repo_id, output, input_json):
     """Build a dry-run-first purge plan for a retired repo."""
     merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot purge-plan", output)
+    repo_id = _snapshot_required_param(ctx, "repo_id", "snapshot purge-plan", output)
     config: Config = ctx.obj["config"]
     console: Console = ctx.obj["console"]
     snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
@@ -629,13 +660,15 @@ def snapshot_purge_plan_cmd(ctx, profile, repo_id, output, input_json):
 
 
 @snapshot.command("schedule")
-@click.option("--profile", "-p", required=True, help="Snapshot profile name")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
 @output_option
 @input_json_option
 @click.pass_context
 def snapshot_schedule_cmd(ctx, profile, output, input_json):
     """Render user systemd units/timers for a snapshot profile."""
     merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot schedule", output)
     config: Config = ctx.obj["config"]
     console: Console = ctx.obj["console"]
     snapshot_profile = _snapshot_profile_or_exit(config, profile, output)

@@ -376,6 +376,274 @@ List or inspect bbackup skills in JSON or Markdown formats.
   bbackup skills --format markdown
   ```
 
+### bbackup snapshot check
+
+**Summary**: Run a non-destructive restic repository check.
+
+Check a native snapshot repository, optionally with restic --read-data-subset for verification schedules.
+
+#### CLI parameters
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `--profile` | `string` | yes | `` | Snapshot profile name from config.yaml. |
+| `--read-data-subset` | `string` | no | `` | Optional restic check --read-data-subset value, such as 5%. |
+| `--dry-run` | `bool` | no | `False` | Return the resolved restic plan without executing it. |
+| `--output` | `string` | no | `` | Output format: text or json. |
+
+#### JSON / environment parameters
+
+| Name | Kind | Type | Required | Default | Description |
+|---|---|---|:---:|---|---|
+| `input_json` | json | `object` | no | `` | Flat JSON object providing all parameters. |
+
+#### Examples
+
+- Run a lightweight repository check.
+
+  ```bash
+  bbackup snapshot check --profile essentials-daily --output json
+  ```
+
+  ```bash
+  bbackup snapshot check --input-json '{"profile":"essentials-daily","output":"json"}' --output json
+  ```
+
+- Run a verification check over a subset of pack data.
+
+  ```bash
+  bbackup snapshot check --profile essentials-daily --read-data-subset 5% --output json
+  ```
+
+  ```bash
+  bbackup snapshot check --input-json '{"profile":"essentials-daily","read_data_subset":"5%","output":"json"}' --output json
+  ```
+
+### bbackup snapshot init
+
+**Summary**: Initialize the restic repository for a snapshot profile.
+
+Initialize the configured restic repository after profile safety preflight. Use dry-run mode to inspect the exact restic init command first.
+
+#### CLI parameters
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `--profile` | `string` | yes | `` | Snapshot profile name from config.yaml. |
+| `--dry-run` | `bool` | no | `False` | Return the resolved restic plan without executing it. |
+| `--output` | `string` | no | `` | Output format: text or json. |
+
+#### JSON / environment parameters
+
+| Name | Kind | Type | Required | Default | Description |
+|---|---|---|:---:|---|---|
+| `input_json` | json | `object` | no | `` | Flat JSON object providing all parameters. |
+
+#### Examples
+
+- Inspect the restic init command without executing it.
+
+  ```bash
+  bbackup snapshot init --profile essentials-daily --dry-run --output json
+  ```
+
+  ```bash
+  bbackup snapshot init --input-json '{"profile":"essentials-daily","dry_run":true,"output":"json"}' --output json
+  ```
+
+### bbackup snapshot plan
+
+**Summary**: Resolve a native snapshot profile without executing restic.
+
+Discover Git repositories and explicit paths for a snapshot profile, then return the restic commands and safety alerts without persisting state.
+
+#### CLI parameters
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `--profile` | `string` | yes | `` | Snapshot profile name from config.yaml. |
+| `--output` | `string` | no | `` | Output format: text or json. |
+
+#### JSON / environment parameters
+
+| Name | Kind | Type | Required | Default | Description |
+|---|---|---|:---:|---|---|
+| `input_json` | json | `object` | no | `` | Flat JSON object providing all parameters. |
+
+#### Examples
+
+- Plan a native snapshot profile with JSON output.
+
+  ```bash
+  bbackup snapshot plan --profile essentials-daily --output json
+  ```
+
+  ```bash
+  bbackup snapshot plan --input-json '{"profile":"essentials-daily","output":"json"}' --output json
+  ```
+
+### bbackup snapshot purge-plan
+
+**Summary**: Build a dry-run-first purge plan for a retired repository.
+
+Return restic forget arguments for a retired repo ID. The command keeps destructive cleanup manual by exposing dry-run and post-confirmation arguments separately.
+
+#### CLI parameters
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `--profile` | `string` | yes | `` | Snapshot profile name from config.yaml. |
+| `--repo-id` | `string` | yes | `` | Tracked Git repository ID from the snapshot state ledger. |
+| `--output` | `string` | no | `` | Output format: text or json. |
+
+#### JSON / environment parameters
+
+| Name | Kind | Type | Required | Default | Description |
+|---|---|---|:---:|---|---|
+| `input_json` | json | `object` | no | `` | Flat JSON object providing all parameters. |
+
+#### Examples
+
+- Prepare a manual purge plan for a retired repository.
+
+  ```bash
+  bbackup snapshot purge-plan --profile essentials-daily --repo-id abc123 --output json
+  ```
+
+  ```bash
+  bbackup snapshot purge-plan --input-json '{"profile":"essentials-daily","repo_id":"abc123","output":"json"}' --output json
+  ```
+
+### bbackup snapshot restore
+
+**Summary**: Restore a restic snapshot into an empty target directory.
+
+Restore a snapshot or snapshot:path selector into an empty target. Dry-run mode returns the restic restore command without contacting Docker.
+
+#### CLI parameters
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `--profile` | `string` | yes | `` | Snapshot profile name from config.yaml. |
+| `--snapshot-id` | `string` | yes | `` | Restic snapshot ID or snapshot:path selector to restore. |
+| `--target` | `path` | yes | `` | Empty restore target directory. |
+| `--include` | `string` | no | `` | Optional restic include filter for targeted restore. |
+| `--dry-run` | `bool` | no | `False` | Return the resolved restic plan without executing it. |
+| `--output` | `string` | no | `` | Output format: text or json. |
+
+#### JSON / environment parameters
+
+| Name | Kind | Type | Required | Default | Description |
+|---|---|---|:---:|---|---|
+| `input_json` | json | `object` | no | `` | Flat JSON object providing all parameters. |
+
+#### Examples
+
+- Plan a targeted restore from a snapshot.
+
+  ```bash
+  bbackup snapshot restore --profile essentials-daily --snapshot-id latest --target /tmp/restore --dry-run --output json
+  ```
+
+  ```bash
+  bbackup snapshot restore --input-json '{"profile":"essentials-daily","snapshot_id":"latest","target":"/tmp/restore","dry_run":true,"output":"json"}' --output json
+  ```
+
+### bbackup snapshot retire
+
+**Summary**: Mark a tracked repository retired after it has a successful snapshot.
+
+Retire a repository in the snapshot state ledger so future purge planning can remain explicit and dry-run-first.
+
+#### CLI parameters
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `--profile` | `string` | yes | `` | Snapshot profile name from config.yaml. |
+| `--repo-id` | `string` | yes | `` | Tracked Git repository ID from the snapshot state ledger. |
+| `--output` | `string` | no | `` | Output format: text or json. |
+
+#### JSON / environment parameters
+
+| Name | Kind | Type | Required | Default | Description |
+|---|---|---|:---:|---|---|
+| `input_json` | json | `object` | no | `` | Flat JSON object providing all parameters. |
+
+#### Examples
+
+- Retire a repository ID after verifying it has a successful snapshot.
+
+  ```bash
+  bbackup snapshot retire --profile essentials-daily --repo-id abc123 --output json
+  ```
+
+  ```bash
+  bbackup snapshot retire --input-json '{"profile":"essentials-daily","repo_id":"abc123","output":"json"}' --output json
+  ```
+
+### bbackup snapshot run
+
+**Summary**: Run a native restic snapshot profile.
+
+Discover active Git repositories and configured paths, enforce safety preflight for non-dry runs, run restic backup, and record successful repository snapshot IDs in the state ledger.
+
+#### CLI parameters
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `--profile` | `string` | yes | `` | Snapshot profile name from config.yaml. |
+| `--dry-run` | `bool` | no | `False` | Return the resolved restic plan without executing it. |
+| `--output` | `string` | no | `` | Output format: text or json. |
+
+#### JSON / environment parameters
+
+| Name | Kind | Type | Required | Default | Description |
+|---|---|---|:---:|---|---|
+| `input_json` | json | `object` | no | `` | Flat JSON object providing all parameters. |
+
+#### Examples
+
+- Dry-run a profile before taking a snapshot.
+
+  ```bash
+  bbackup snapshot run --profile essentials-daily --dry-run --output json
+  ```
+
+  ```bash
+  bbackup snapshot run --input-json '{"profile":"essentials-daily","dry_run":true,"output":"json"}' --output json
+  ```
+
+### bbackup snapshot schedule
+
+**Summary**: Render user systemd units and timers for a snapshot profile.
+
+Render matching service/timer units for daily snapshot runs, weekly non-destructive checks, and monthly verification checks.
+
+#### CLI parameters
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `--profile` | `string` | yes | `` | Snapshot profile name from config.yaml. |
+| `--output` | `string` | no | `` | Output format: text or json. |
+
+#### JSON / environment parameters
+
+| Name | Kind | Type | Required | Default | Description |
+|---|---|---|:---:|---|---|
+| `input_json` | json | `object` | no | `` | Flat JSON object providing all parameters. |
+
+#### Examples
+
+- Render schedule units for manual installation.
+
+  ```bash
+  bbackup snapshot schedule --profile essentials-daily --output json
+  ```
+
+  ```bash
+  bbackup snapshot schedule --input-json '{"profile":"essentials-daily","output":"json"}' --output json
+  ```
+
 ## bbman
 
 ### bbman check-deps

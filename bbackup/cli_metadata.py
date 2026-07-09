@@ -83,6 +83,107 @@ def _register_bbackup(cmd: CliCommand) -> None:
     BBACKUP_COMMANDS[cmd.id] = cmd
 
 
+def _snapshot_common_parameters(
+    *,
+    profile_required: bool = True,
+    dry_run: bool = False,
+    repo_id: bool = False,
+    snapshot_id: bool = False,
+    target: bool = False,
+    include_path: bool = False,
+    read_data_subset: bool = False,
+) -> List[Parameter]:
+    params = [
+        Parameter(
+            name="profile",
+            kind="flag",
+            type="string",
+            description="Snapshot profile name from config.yaml.",
+            cli_flag="--profile",
+            json_key="profile",
+            required=profile_required,
+        ),
+    ]
+    if repo_id:
+        params.append(Parameter(
+            name="repo_id",
+            kind="flag",
+            type="string",
+            description="Tracked Git repository ID from the snapshot state ledger.",
+            cli_flag="--repo-id",
+            json_key="repo_id",
+            required=True,
+        ))
+    if snapshot_id:
+        params.append(Parameter(
+            name="snapshot_id",
+            kind="flag",
+            type="string",
+            description="Restic snapshot ID or snapshot:path selector to restore.",
+            cli_flag="--snapshot-id",
+            json_key="snapshot_id",
+            required=True,
+        ))
+    if target:
+        params.append(Parameter(
+            name="target",
+            kind="flag",
+            type="path",
+            description="Empty restore target directory.",
+            cli_flag="--target",
+            json_key="target",
+            required=True,
+        ))
+    if include_path:
+        params.append(Parameter(
+            name="include_path",
+            kind="flag",
+            type="string",
+            description="Optional restic include filter for targeted restore.",
+            cli_flag="--include",
+            json_key="include_path",
+        ))
+    if read_data_subset:
+        params.append(Parameter(
+            name="read_data_subset",
+            kind="flag",
+            type="string",
+            description="Optional restic check --read-data-subset value, such as 5%.",
+            cli_flag="--read-data-subset",
+            json_key="read_data_subset",
+        ))
+    if dry_run:
+        params.append(Parameter(
+            name="dry_run",
+            kind="flag",
+            type="bool",
+            description="Return the resolved restic plan without executing it.",
+            cli_flag="--dry-run",
+            json_key="dry_run",
+            default=False,
+        ))
+    params.extend([
+        Parameter(
+            name="output",
+            kind="flag",
+            type="string",
+            description="Output format: text or json.",
+            cli_flag="--output",
+            json_key="output",
+            allowed_values=["text", "json"],
+            shape="enum",
+        ),
+        Parameter(
+            name="input_json",
+            kind="json_field",
+            type="object",
+            description="Flat JSON object providing all parameters.",
+            shape="object",
+        ),
+    ])
+    return params
+
+
 _register_bbackup(
     CliCommand(
         cli="bbackup",
@@ -253,6 +354,199 @@ _register_bbackup(
                 description="Dry-run to see what would be backed up.",
                 cli="bbackup backup --backup-set production --dry-run --no-interactive --output json",
                 input_json={"backup_set": "production", "dry_run": True, "no_interactive": True, "output": "json"},
+            ),
+        ],
+    )
+)
+
+
+_register_bbackup(
+    CliCommand(
+        cli="bbackup",
+        name="snapshot plan",
+        summary="Resolve a native snapshot profile without executing restic.",
+        description=(
+            "Discover Git repositories and explicit paths for a snapshot profile, "
+            "then return the restic commands and safety alerts without persisting state."
+        ),
+        category="snapshot",
+        parameters=_snapshot_common_parameters(),
+        examples=[
+            Example(
+                description="Plan a native snapshot profile with JSON output.",
+                cli="bbackup snapshot plan --profile essentials-daily --output json",
+                input_json={"profile": "essentials-daily", "output": "json"},
+            ),
+        ],
+    )
+)
+
+
+_register_bbackup(
+    CliCommand(
+        cli="bbackup",
+        name="snapshot init",
+        summary="Initialize the restic repository for a snapshot profile.",
+        description=(
+            "Initialize the configured restic repository after profile safety preflight. "
+            "Use dry-run mode to inspect the exact restic init command first."
+        ),
+        category="snapshot",
+        parameters=_snapshot_common_parameters(dry_run=True),
+        examples=[
+            Example(
+                description="Inspect the restic init command without executing it.",
+                cli="bbackup snapshot init --profile essentials-daily --dry-run --output json",
+                input_json={"profile": "essentials-daily", "dry_run": True, "output": "json"},
+            ),
+        ],
+    )
+)
+
+
+_register_bbackup(
+    CliCommand(
+        cli="bbackup",
+        name="snapshot run",
+        summary="Run a native restic snapshot profile.",
+        description=(
+            "Discover active Git repositories and configured paths, enforce safety "
+            "preflight for non-dry runs, run restic backup, and record successful "
+            "repository snapshot IDs in the state ledger."
+        ),
+        category="snapshot",
+        parameters=_snapshot_common_parameters(dry_run=True),
+        examples=[
+            Example(
+                description="Dry-run a profile before taking a snapshot.",
+                cli="bbackup snapshot run --profile essentials-daily --dry-run --output json",
+                input_json={"profile": "essentials-daily", "dry_run": True, "output": "json"},
+            ),
+        ],
+    )
+)
+
+
+_register_bbackup(
+    CliCommand(
+        cli="bbackup",
+        name="snapshot check",
+        summary="Run a non-destructive restic repository check.",
+        description=(
+            "Check a native snapshot repository, optionally with restic "
+            "--read-data-subset for verification schedules."
+        ),
+        category="snapshot",
+        parameters=_snapshot_common_parameters(dry_run=True, read_data_subset=True),
+        examples=[
+            Example(
+                description="Run a lightweight repository check.",
+                cli="bbackup snapshot check --profile essentials-daily --output json",
+                input_json={"profile": "essentials-daily", "output": "json"},
+            ),
+            Example(
+                description="Run a verification check over a subset of pack data.",
+                cli="bbackup snapshot check --profile essentials-daily --read-data-subset 5% --output json",
+                input_json={"profile": "essentials-daily", "read_data_subset": "5%", "output": "json"},
+            ),
+        ],
+    )
+)
+
+
+_register_bbackup(
+    CliCommand(
+        cli="bbackup",
+        name="snapshot restore",
+        summary="Restore a restic snapshot into an empty target directory.",
+        description=(
+            "Restore a snapshot or snapshot:path selector into an empty target. "
+            "Dry-run mode returns the restic restore command without contacting Docker."
+        ),
+        category="snapshot",
+        parameters=_snapshot_common_parameters(
+            dry_run=True,
+            snapshot_id=True,
+            target=True,
+            include_path=True,
+        ),
+        examples=[
+            Example(
+                description="Plan a targeted restore from a snapshot.",
+                cli="bbackup snapshot restore --profile essentials-daily --snapshot-id latest --target /tmp/restore --dry-run --output json",
+                input_json={
+                    "profile": "essentials-daily",
+                    "snapshot_id": "latest",
+                    "target": "/tmp/restore",
+                    "dry_run": True,
+                    "output": "json",
+                },
+            ),
+        ],
+    )
+)
+
+
+_register_bbackup(
+    CliCommand(
+        cli="bbackup",
+        name="snapshot retire",
+        summary="Mark a tracked repository retired after it has a successful snapshot.",
+        description=(
+            "Retire a repository in the snapshot state ledger so future purge planning "
+            "can remain explicit and dry-run-first."
+        ),
+        category="snapshot",
+        parameters=_snapshot_common_parameters(repo_id=True),
+        examples=[
+            Example(
+                description="Retire a repository ID after verifying it has a successful snapshot.",
+                cli="bbackup snapshot retire --profile essentials-daily --repo-id abc123 --output json",
+                input_json={"profile": "essentials-daily", "repo_id": "abc123", "output": "json"},
+            ),
+        ],
+    )
+)
+
+
+_register_bbackup(
+    CliCommand(
+        cli="bbackup",
+        name="snapshot purge-plan",
+        summary="Build a dry-run-first purge plan for a retired repository.",
+        description=(
+            "Return restic forget arguments for a retired repo ID. The command keeps "
+            "destructive cleanup manual by exposing dry-run and post-confirmation arguments separately."
+        ),
+        category="snapshot",
+        parameters=_snapshot_common_parameters(repo_id=True),
+        examples=[
+            Example(
+                description="Prepare a manual purge plan for a retired repository.",
+                cli="bbackup snapshot purge-plan --profile essentials-daily --repo-id abc123 --output json",
+                input_json={"profile": "essentials-daily", "repo_id": "abc123", "output": "json"},
+            ),
+        ],
+    )
+)
+
+
+_register_bbackup(
+    CliCommand(
+        cli="bbackup",
+        name="snapshot schedule",
+        summary="Render user systemd units and timers for a snapshot profile.",
+        description=(
+            "Render matching service/timer units for daily snapshot runs, weekly "
+            "non-destructive checks, and monthly verification checks."
+        ),
+        category="snapshot",
+        parameters=_snapshot_common_parameters(),
+        examples=[
+            Example(
+                description="Render schedule units for manual installation.",
+                cli="bbackup snapshot schedule --profile essentials-daily --output json",
+                input_json={"profile": "essentials-daily", "output": "json"},
             ),
         ],
     )

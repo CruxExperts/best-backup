@@ -1,5 +1,6 @@
 import json
 import shutil
+import socket
 import subprocess
 import textwrap
 
@@ -37,7 +38,7 @@ def _write_local_restic_config(tmp_path):
         snapshot_profiles:
           local-test:
             engine: restic
-            host_id: test-host
+            host_id: {socket.gethostname()}
             repository: {tmp_path / "restic-repo"}
             cache_dir: {tmp_path / "cache"}
             state_dir: {tmp_path / "state"}

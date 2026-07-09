@@ -19,17 +19,19 @@ current uv-based install, development, and release instructions.
 - Native restic snapshot profiles with commands for `snapshot init`, `snapshot run`, `snapshot check`, `snapshot restore`, `snapshot retire`, `snapshot purge-plan`, and `snapshot schedule`.
 - Local restic integration coverage that initializes a temporary repository, snapshots a Git repo, checks the repository, restores content, and verifies the state ledger snapshot ID.
 - Profile schedule rendering for daily backup, weekly non-destructive maintenance checks, and monthly verification checks with configurable `verification_read_data_subset`.
+- Generated CLI skills metadata for the native snapshot command surface.
 
 ### Changed
 
 - Snapshot schedule units now render matching service/timer pairs, use `/usr/bin/env bbackup`, and escape systemd percent specifiers.
+- Snapshot commands now accept required options from `--input-json` consistently for agent-driven workflows.
 - Retired-repo destructive cleanup remains dry-run-first/manual through `snapshot purge-plan`.
 - The pytest `integration` marker now covers external-tool integration tests such as Docker and restic.
 
 ### Fixed
 
 - Google Drive rclone snapshot profiles without a dedicated `client_id` remain rejected by default, while `allow_default_rclone_drive_client: true` provides a conservative profile-local opt-in.
-- Non-dry snapshot operations now enforce the rclone Drive client preflight before running restic.
+- Non-dry snapshot operations now enforce profile safety preflight checks before running restic.
 - Git repo identity no longer changes on every commit; legacy head-derived repo IDs migrate safely, and unknown active same-path identity conflicts block history merging.
 - `list-backups` and restore dry-run planning no longer initialize Docker for file-only planning paths.
 - Restore dry-runs now validate filesystem destination and multi-filesystem constraints before returning a success plan.

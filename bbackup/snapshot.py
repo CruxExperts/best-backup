@@ -418,16 +418,16 @@ def snapshot_init(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, 
     args = runner.init_args()
     if dry_run:
         return {"dry_run": True, "args": args}
-    _require_rclone_drive_client(profile)
     if profile.cache_dir:
         expand_path(profile.cache_dir).mkdir(parents=True, exist_ok=True)
     expand_path(profile.state_dir).mkdir(parents=True, exist_ok=True)
+    _require_snapshot_operation_preflight(profile, require_initialized=False)
     return runner.run(args)
 
 
 def snapshot_run(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, Any]:
     if not dry_run:
-        _require_rclone_drive_client(profile)
+        _require_snapshot_operation_preflight(profile)
     plan = _snapshot_plan(profile, save=not dry_run)
     if dry_run:
         plan["dry_run"] = True
@@ -464,7 +464,7 @@ def snapshot_check(profile: SnapshotProfile, read_data_subset: Optional[str] = N
     args = runner.check_args(read_data_subset)
     if dry_run:
         return {"dry_run": True, "args": args}
-    _require_rclone_drive_client(profile)
+    _require_snapshot_operation_preflight(profile)
     return runner.run(args)
 
 
@@ -479,7 +479,7 @@ def snapshot_restore(
     args = runner.restore_args(snapshot_id, target, include)
     if dry_run:
         return {"dry_run": True, "args": args}
-    _require_rclone_drive_client(profile)
+    _require_snapshot_operation_preflight(profile)
     return runner.run(args)
 
 
@@ -615,6 +615,32 @@ def _require_rclone_drive_client(profile: SnapshotProfile) -> None:
     check = _rclone_drive_client_id_check(profile)
     if not check["ok"]:
         raise SnapshotError(check["message"])
+
+
+def _require_snapshot_operation_preflight(profile: SnapshotProfile, require_initialized: bool = True) -> None:
+    checks: Dict[str, Dict[str, Any]] = {
+        "engine": {"ok": profile.engine == "restic", "message": profile.engine},
+        "restic": _tool_check("restic"),
+        "rclone": _tool_check("rclone") if profile.repository.startswith("rclone:") else {
+            "ok": True,
+            "message": "not required for non-rclone repository",
+        },
+        "rclone_drive_client_id": _rclone_drive_client_id_check(profile),
+        "repository": {"ok": bool(profile.repository), "message": profile.repository or "missing"},
+        "hostname": _hostname_check(profile),
+        "password_file": _password_file_check(profile),
+        "cache_dir": _dir_check(profile.cache_dir, create=False),
+        "state_dir": _dir_check(profile.state_dir, create=False),
+    }
+    if require_initialized:
+        checks["repository_initialized"] = _repository_initialized_check(profile)
+    failures = [
+        f"{name}: {check['message']}"
+        for name, check in checks.items()
+        if not check["ok"]
+    ]
+    if failures:
+        raise SnapshotError("Snapshot profile preflight failed: " + "; ".join(failures))
 
 
 def check_all_snapshot_profiles(config: Config) -> Dict[str, Any]:

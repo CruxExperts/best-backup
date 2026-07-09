@@ -30,7 +30,7 @@ def write_snapshot_config(tmp_path, extra=""):
           essentials-daily:
             engine: restic
             host_id: test-host
-            repository: rclone:ALIEN001-GD:backups/SCAR01/restic/essentials-daily
+            repository: rclone:example-drive:backups/WORKSTATION01/restic/essentials-daily
             cache_dir: {tmp_path}/cache
             state_dir: {tmp_path}/state
             password_file: {tmp_path}/password
@@ -44,7 +44,7 @@ def write_snapshot_config(tmp_path, extra=""):
             exclude_paths:
               - {tmp_path}/repos/archives
             tags:
-              - scar01
+              - workstation01
             {extra}
     """))
     (tmp_path / "password").write_text("secret\n")
@@ -340,6 +340,76 @@ def test_snapshot_init_dry_run_cli_json(tmp_path):
     assert data["data"]["args"][-1] == "init"
 
 
+def test_snapshot_commands_accept_required_options_from_input_json(tmp_path):
+    cfg_file = write_snapshot_config(tmp_path)
+    init_git_repo(tmp_path / "repos" / "repo-a")
+    cfg = Config(config_path=str(cfg_file))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    repo_id = reconcile_repos(profile, discover_git_repos(profile))["active_repo_ids"][0]
+    state = load_state(profile)
+    state["repos"][repo_id]["successful_snapshot_ids"] = ["abc123"]
+    save_state(profile, state)
+
+    runner = CliRunner()
+    commands = [
+        ("plan", {"profile": "essentials-daily", "output": "json"}),
+        ("init", {"profile": "essentials-daily", "dry_run": True, "output": "json"}),
+        ("run", {"profile": "essentials-daily", "dry_run": True, "output": "json"}),
+        (
+            "check",
+            {
+                "profile": "essentials-daily",
+                "read_data_subset": "5%",
+                "dry_run": True,
+                "output": "json",
+            },
+        ),
+        (
+            "restore",
+            {
+                "profile": "essentials-daily",
+                "snapshot_id": "latest",
+                "target": str(tmp_path / "restore-target"),
+                "dry_run": True,
+                "output": "json",
+            },
+        ),
+        ("retire", {"profile": "essentials-daily", "repo_id": repo_id, "output": "json"}),
+        ("purge-plan", {"profile": "essentials-daily", "repo_id": repo_id, "output": "json"}),
+        ("schedule", {"profile": "essentials-daily", "output": "json"}),
+    ]
+
+    for command, payload in commands:
+        result = runner.invoke(
+            cli,
+            [
+                "--config", str(cfg_file),
+                "snapshot", command,
+                "--input-json", json.dumps(payload),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["success"] is True
+
+
+def test_snapshot_command_missing_json_required_param_returns_json_error(tmp_path):
+    cfg_file = write_snapshot_config(tmp_path)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config", str(cfg_file),
+            "snapshot", "restore",
+            "--input-json", json.dumps({"profile": "essentials-daily", "output": "json"}),
+        ],
+    )
+
+    assert result.exit_code == 1
+    data = json.loads(result.output)
+    assert data["success"] is False
+    assert "Missing required option: --snapshot-id" in data["errors"][0]
+
+
 def test_snapshot_health_reports_profile_dependencies(tmp_path):
     cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
     profile = cfg.snapshot_profiles["essentials-daily"]
@@ -359,7 +429,7 @@ def test_snapshot_health_rejects_google_drive_remote_without_client_id(tmp_path)
 
     def run_side_effect(args, **kwargs):
         if args[:3] == ["rclone", "config", "show"]:
-            return MagicMock(returncode=0, stdout="[ALIEN001-GD]\ntype = drive\nscope = drive\n", stderr="")
+            return MagicMock(returncode=0, stdout="[example-drive]\ntype = drive\nscope = drive\n", stderr="")
         return MagicMock(returncode=0, stdout="restic 0.19.0\n", stderr="")
 
     with patch("bbackup.snapshot.shutil.which", return_value="/usr/bin/tool"), \
@@ -380,7 +450,7 @@ def test_snapshot_health_accepts_google_drive_remote_with_client_id(tmp_path):
         if args[:3] == ["rclone", "config", "show"]:
             return MagicMock(
                 returncode=0,
-                stdout="[ALIEN001-GD]\ntype = drive\nclient_id = example.apps.googleusercontent.com\n",
+                stdout="[example-drive]\ntype = drive\nclient_id = example.apps.googleusercontent.com\n",
                 stderr="",
             )
         return MagicMock(returncode=0, stdout="restic 0.19.0\n", stderr="")
@@ -400,7 +470,7 @@ def test_snapshot_health_accepts_default_drive_client_when_profile_allows_it(tmp
 
     def run_side_effect(args, **kwargs):
         if args[:3] == ["rclone", "config", "show"]:
-            return MagicMock(returncode=0, stdout="[ALIEN001-GD]\ntype = drive\nscope = drive\n", stderr="")
+            return MagicMock(returncode=0, stdout="[example-drive]\ntype = drive\nscope = drive\n", stderr="")
         return MagicMock(returncode=0, stdout="restic 0.19.0\n", stderr="")
 
     with patch("bbackup.snapshot.shutil.which", return_value="/usr/bin/tool"), \
@@ -419,7 +489,7 @@ def test_snapshot_check_enforces_google_drive_client_id_or_opt_in(tmp_path):
 
     def run_side_effect(args, **kwargs):
         if args[:3] == ["rclone", "config", "show"]:
-            return MagicMock(returncode=0, stdout="[ALIEN001-GD]\ntype = drive\nscope = drive\n", stderr="")
+            return MagicMock(returncode=0, stdout="[example-drive]\ntype = drive\nscope = drive\n", stderr="")
         return MagicMock(returncode=0, stdout="", stderr="")
 
     with patch("bbackup.snapshot.shutil.which", return_value="/usr/bin/tool"), \
@@ -430,6 +500,55 @@ def test_snapshot_check_enforces_google_drive_client_id_or_opt_in(tmp_path):
             assert "no client_id" in str(exc)
         else:
             raise AssertionError("snapshot_check should enforce Google Drive client_id")
+
+
+def test_snapshot_check_preflight_rejects_wrong_hostname(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+
+    def run_side_effect(args, **kwargs):
+        if args[:3] == ["rclone", "config", "show"]:
+            return MagicMock(
+                returncode=0,
+                stdout="[example-drive]\ntype = drive\nclient_id = example.apps.googleusercontent.com\n",
+                stderr="",
+            )
+        return MagicMock(returncode=0, stdout="restic 0.19.0\n", stderr="")
+
+    with patch("bbackup.snapshot.shutil.which", return_value="/usr/bin/tool"), \
+         patch("bbackup.snapshot.socket.gethostname", return_value="other-host"), \
+         patch("bbackup.snapshot.subprocess.run", side_effect=run_side_effect):
+        try:
+            snapshot_check(profile)
+        except SnapshotError as exc:
+            assert "hostname" in str(exc)
+        else:
+            raise AssertionError("snapshot_check should reject profiles for a different host")
+
+
+def test_snapshot_check_preflight_rejects_permissive_password_file(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    (tmp_path / "password").chmod(0o644)
+
+    def run_side_effect(args, **kwargs):
+        if args[:3] == ["rclone", "config", "show"]:
+            return MagicMock(
+                returncode=0,
+                stdout="[example-drive]\ntype = drive\nclient_id = example.apps.googleusercontent.com\n",
+                stderr="",
+            )
+        return MagicMock(returncode=0, stdout="restic 0.19.0\n", stderr="")
+
+    with patch("bbackup.snapshot.shutil.which", return_value="/usr/bin/tool"), \
+         patch("bbackup.snapshot.socket.gethostname", return_value="test-host"), \
+         patch("bbackup.snapshot.subprocess.run", side_effect=run_side_effect):
+        try:
+            snapshot_check(profile)
+        except SnapshotError as exc:
+            assert "password file must not be group/world accessible" in str(exc)
+        else:
+            raise AssertionError("snapshot_check should reject permissive password files")
 
 
 def test_schedule_units_include_matching_services_for_all_timers(tmp_path):
