@@ -34,6 +34,8 @@ class DiscoveredRepo:
     repo_id: str
     origin: str = ""
     head: str = ""
+    legacy_fingerprint: str = ""
+    legacy_repo_id: str = ""
 
 
 def expand_path(path: str) -> Path:
@@ -103,15 +105,20 @@ def _repo_from_path(path: Path) -> Optional[DiscoveredRepo]:
     origin = _git(root, ["config", "--get", "remote.origin.url"]) or ""
     head = _git(root, ["rev-parse", "HEAD"]) or ""
     git_dir = _git(root, ["rev-parse", "--git-dir"]) or ""
-    fingerprint_source = "\n".join([str(root), origin, head, git_dir])
+    fingerprint_source = "\n".join([str(root), origin, git_dir])
     fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
     repo_id = hashlib.sha256(f"{origin or root}:{fingerprint}".encode("utf-8")).hexdigest()[:16]
+    legacy_fingerprint_source = "\n".join([str(root), origin, head, git_dir])
+    legacy_fingerprint = hashlib.sha256(legacy_fingerprint_source.encode("utf-8")).hexdigest()
+    legacy_repo_id = hashlib.sha256(f"{origin or root}:{legacy_fingerprint}".encode("utf-8")).hexdigest()[:16]
     return DiscoveredRepo(
         path=str(root),
         fingerprint=fingerprint,
         repo_id=repo_id,
         origin=origin,
         head=head,
+        legacy_fingerprint=legacy_fingerprint,
+        legacy_repo_id=legacy_repo_id,
     )
 
 
@@ -163,6 +170,7 @@ def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo], 
             data for data in repos.values()
             if data.get("path") == repo.path
             and data.get("fingerprint") != repo.fingerprint
+            and data.get("status") == "retired"
         ]
         if reused:
             alerts.append({
@@ -173,9 +181,54 @@ def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo], 
             })
             continue
 
-        entry = repos.setdefault(repo.repo_id, {})
+        unexpected_active_reuse = [
+            data for existing_id, data in repos.items()
+            if data.get("path") == repo.path
+            and data.get("status") == "active"
+            and existing_id not in {repo.repo_id, repo.legacy_repo_id}
+            and data.get("fingerprint") not in {repo.fingerprint, repo.legacy_fingerprint}
+        ]
+        if unexpected_active_reuse:
+            alerts.append({
+                "severity": "critical",
+                "code": "active_path_identity_conflict",
+                "path": repo.path,
+                "message": f"Active repo path has conflicting identity history: {repo.path}",
+            })
+            continue
+
+        active_ids_for_path = [
+            existing_id
+            for existing_id, data in repos.items()
+            if data.get("path") == repo.path and data.get("status") == "active"
+            and (
+                existing_id == repo.repo_id
+                or existing_id == repo.legacy_repo_id
+                or data.get("fingerprint") in {repo.fingerprint, repo.legacy_fingerprint}
+            )
+        ]
+        if active_ids_for_path:
+            merged_entry: Dict[str, Any] = {}
+            merged_success_ids: List[str] = []
+            for existing_id in active_ids_for_path:
+                existing_entry = repos.pop(existing_id)
+                merged_entry.update(existing_entry)
+                for snapshot_id in existing_entry.get("successful_snapshot_ids", []) or []:
+                    if snapshot_id not in merged_success_ids:
+                        merged_success_ids.append(snapshot_id)
+            if repo.repo_id in repos:
+                current_entry = repos.pop(repo.repo_id)
+                merged_entry.update(current_entry)
+                for snapshot_id in current_entry.get("successful_snapshot_ids", []) or []:
+                    if snapshot_id not in merged_success_ids:
+                        merged_success_ids.append(snapshot_id)
+            if merged_success_ids:
+                merged_entry["successful_snapshot_ids"] = merged_success_ids
+            repos[repo.repo_id] = merged_entry
+        repo_id = repo.repo_id
+        entry = repos.setdefault(repo_id, {})
         entry.update({
-            "repo_id": repo.repo_id,
+            "repo_id": repo_id,
             "path": repo.path,
             "fingerprint": repo.fingerprint,
             "origin": repo.origin,
@@ -365,6 +418,7 @@ def snapshot_init(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, 
     args = runner.init_args()
     if dry_run:
         return {"dry_run": True, "args": args}
+    _require_rclone_drive_client(profile)
     if profile.cache_dir:
         expand_path(profile.cache_dir).mkdir(parents=True, exist_ok=True)
     expand_path(profile.state_dir).mkdir(parents=True, exist_ok=True)
@@ -372,6 +426,8 @@ def snapshot_init(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, 
 
 
 def snapshot_run(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, Any]:
+    if not dry_run:
+        _require_rclone_drive_client(profile)
     plan = _snapshot_plan(profile, save=not dry_run)
     if dry_run:
         plan["dry_run"] = True
@@ -408,6 +464,7 @@ def snapshot_check(profile: SnapshotProfile, read_data_subset: Optional[str] = N
     args = runner.check_args(read_data_subset)
     if dry_run:
         return {"dry_run": True, "args": args}
+    _require_rclone_drive_client(profile)
     return runner.run(args)
 
 
@@ -422,6 +479,7 @@ def snapshot_restore(
     args = runner.restore_args(snapshot_id, target, include)
     if dry_run:
         return {"dry_run": True, "args": args}
+    _require_rclone_drive_client(profile)
     return runner.run(args)
 
 
@@ -463,12 +521,27 @@ def schedule_units(profile: SnapshotProfile) -> Dict[str, str]:
     daily_time = schedule.get("daily_time", "03:30")
     maintenance_time = schedule.get("maintenance_time", "Sun 04:30")
     verification_time = schedule.get("verification_time", "monthly")
+    verification_read_data_subset = _systemd_exec_arg(str(schedule.get("verification_read_data_subset", "5%")))
     unit = f"""[Unit]
 Description=bbackup {profile.host_id} {profile.name} snapshot
 
 [Service]
 Type=oneshot
-ExecStart=bbackup snapshot run --profile {shlex.quote(profile.name)}
+ExecStart=/usr/bin/env bbackup snapshot run --profile {shlex.quote(profile.name)}
+"""
+    maintenance_service = f"""[Unit]
+Description=bbackup {profile.host_id} {profile.name} weekly maintenance
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bbackup snapshot check --profile {shlex.quote(profile.name)}
+"""
+    verification_service = f"""[Unit]
+Description=bbackup {profile.host_id} {profile.name} monthly verification
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bbackup snapshot check --profile {shlex.quote(profile.name)} --read-data-subset {shlex.quote(verification_read_data_subset)}
 """
     timer = f"""[Unit]
 Description=Run bbackup {profile.host_id} {profile.name} snapshot daily
@@ -482,23 +555,25 @@ RandomizedDelaySec=30m
 WantedBy=timers.target
 """
     maintenance = f"""[Unit]
-Description=bbackup {profile.host_id} {profile.name} weekly maintenance
+Description=Run bbackup {profile.host_id} {profile.name} weekly maintenance
 
 [Timer]
 OnCalendar={maintenance_time}
 Persistent=true
 RandomizedDelaySec=1h
+Unit={service_name}-maintenance.service
 
 [Install]
 WantedBy=timers.target
 """
     verification = f"""[Unit]
-Description=bbackup {profile.host_id} {profile.name} monthly verification
+Description=Run bbackup {profile.host_id} {profile.name} monthly verification
 
 [Timer]
 OnCalendar={verification_time}
 Persistent=true
 RandomizedDelaySec=2h
+Unit={service_name}-verification.service
 
 [Install]
 WantedBy=timers.target
@@ -506,9 +581,15 @@ WantedBy=timers.target
     return {
         f"{service_name}.service": unit,
         f"{service_name}.timer": timer,
+        f"{service_name}-maintenance.service": maintenance_service,
         f"{service_name}-maintenance.timer": maintenance,
+        f"{service_name}-verification.service": verification_service,
         f"{service_name}-verification.timer": verification,
     }
+
+
+def _systemd_exec_arg(value: str) -> str:
+    return value.replace("%", "%%")
 
 
 def check_snapshot_profile(profile: SnapshotProfile) -> Dict[str, Any]:
@@ -528,6 +609,12 @@ def check_snapshot_profile(profile: SnapshotProfile) -> Dict[str, Any]:
     checks["repository_initialized"] = _repository_initialized_check(profile)
     ok = all(check["ok"] for check in checks.values())
     return {"ok": ok, "profile": profile.name, "checks": checks}
+
+
+def _require_rclone_drive_client(profile: SnapshotProfile) -> None:
+    check = _rclone_drive_client_id_check(profile)
+    if not check["ok"]:
+        raise SnapshotError(check["message"])
 
 
 def check_all_snapshot_profiles(config: Config) -> Dict[str, Any]:
@@ -592,6 +679,14 @@ def _rclone_drive_client_id_check(profile: SnapshotProfile) -> Dict[str, Any]:
         return {"ok": True, "message": f"rclone remote {remote_name} type {fields.get('type', 'unknown')}"}
     if fields.get("client_id"):
         return {"ok": True, "message": f"Google Drive remote {remote_name} has client_id configured"}
+    if profile.allow_default_rclone_drive_client:
+        return {
+            "ok": True,
+            "message": (
+                f"Google Drive remote {remote_name} uses the default rclone Drive client by "
+                "explicit profile configuration"
+            ),
+        }
     return {
         "ok": False,
         "message": (

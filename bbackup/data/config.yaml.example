@@ -194,6 +194,9 @@ snapshot_profiles:
     engine: restic
     host_id: SCAR01
     repository: rclone:ALIEN001-GD:backups/SCAR01/restic/essentials-daily
+    # Prefer a dedicated Google Drive rclone OAuth client. Set this only as an
+    # explicit YAML boolean true when accepting rclone's shared default client.
+    allow_default_rclone_drive_client: false
     cache_dir: ~/.cache/bbackup/restic/SCAR01/essentials-daily
     state_dir: ~/.local/state/bbackup/SCAR01/essentials-daily
     password_file: ~/.local/share/bbackup-credentials/restic/SCAR01/essentials-daily.password
@@ -239,6 +242,7 @@ snapshot_profiles:
       daily_time: "03:30"
       maintenance_time: "Sun 04:30"
       verification_time: "monthly"
+      verification_read_data_subset: "5%"
 
 # Docker Settings
 docker:

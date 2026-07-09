@@ -63,6 +63,7 @@ class SnapshotProfile:
     schedule: Dict[str, Any] = field(default_factory=dict)
     retry_lock: str = "5m"
     tags: List[str] = field(default_factory=list)
+    allow_default_rclone_drive_client: bool = False
 
 
 RCLONE_OPTIONS_CAP = 32
@@ -292,6 +293,9 @@ class Config:
                 schedule=dict(profile_data.get("schedule", {}) or {}),
                 retry_lock=str(profile_data.get("retry_lock", "5m")),
                 tags=list(profile_data.get("tags", []) or []),
+                allow_default_rclone_drive_client=(
+                    profile_data.get("allow_default_rclone_drive_client") is True
+                ),
             )
 
         # Parse top-level rclone default options

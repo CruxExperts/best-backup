@@ -1,4 +1,5 @@
 import json
+import hashlib
 import textwrap
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +16,8 @@ from bbackup.snapshot import (
     purge_plan,
     reconcile_repos,
     retire_repo,
+    save_state,
+    snapshot_check,
     snapshot_plan,
     state_file,
 )
@@ -71,6 +74,12 @@ def test_snapshot_profile_config_parsed(tmp_path):
     assert profile.repo_homes == [f"{tmp_path}/repos"]
     assert profile.explicit_repos == [f"{tmp_path}/myrig"]
     assert profile.exclude_paths == [f"{tmp_path}/repos/archives"]
+
+
+def test_snapshot_profile_default_drive_client_opt_in_requires_boolean_true(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path, 'allow_default_rclone_drive_client: "false"')))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    assert profile.allow_default_rclone_drive_client is False
 
 
 def test_restic_backup_args_include_required_flags(tmp_path):
@@ -168,6 +177,92 @@ def test_path_reuse_with_different_fingerprint_alerts(tmp_path):
 
     result = reconcile_repos(profile, discovered)
     assert result["alerts"][0]["code"] == "path_reuse_conflict"
+
+
+def test_reconcile_updates_active_repo_after_new_commit(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    repo_path = tmp_path / "repos" / "repo-a"
+    init_git_repo(repo_path)
+    first = reconcile_repos(profile, discover_git_repos(profile))
+    repo_id = first["active_repo_ids"][0]
+
+    (repo_path / "README.md").write_text("changed\n")
+    import subprocess
+
+    subprocess.run(["git", "-C", str(repo_path), "add", "README.md"], check=True)
+    subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "change"], check=True, capture_output=True)
+    second = reconcile_repos(profile, discover_git_repos(profile))
+
+    assert second["alerts"] == []
+    assert second["active_repo_ids"] == [repo_id]
+    state = load_state(profile)
+    assert state["repos"][repo_id]["head"]
+
+
+def test_reconcile_migrates_legacy_head_derived_repo_id(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    repo_path = tmp_path / "repos" / "repo-a"
+    init_git_repo(repo_path)
+    discovered = discover_git_repos(profile)
+    repo = discovered[0]
+    legacy_fingerprint = repo.legacy_fingerprint
+    legacy_repo_id = repo.legacy_repo_id
+    assert legacy_repo_id != repo.repo_id
+
+    save_state(profile, {
+        "repos": {
+            legacy_repo_id: {
+                "repo_id": legacy_repo_id,
+                "path": repo.path,
+                "fingerprint": legacy_fingerprint,
+                "origin": repo.origin,
+                "head": repo.head,
+                "status": "active",
+                "successful_snapshot_ids": ["old-snapshot"],
+            }
+        }
+    })
+
+    plan = snapshot_plan(profile)
+    assert plan["repos"][0]["repo_id"] == repo.repo_id
+    assert f"repo_id={repo.repo_id}" in plan["repos"][0]["args"]
+
+    result = reconcile_repos(profile, discovered)
+    state = load_state(profile)
+    assert result["active_repo_ids"] == [repo.repo_id]
+    assert legacy_repo_id not in state["repos"]
+    assert state["repos"][repo.repo_id]["successful_snapshot_ids"] == ["old-snapshot"]
+
+
+def test_reconcile_blocks_unknown_active_same_path_identity_change(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    repo_path = tmp_path / "repos" / "repo-a"
+    init_git_repo(repo_path)
+    repo = discover_git_repos(profile)[0]
+    conflicting_fingerprint = hashlib.sha256(b"not-this-repo").hexdigest()
+    conflicting_repo_id = hashlib.sha256(f"{repo.origin or repo.path}:{conflicting_fingerprint}".encode("utf-8")).hexdigest()[:16]
+
+    save_state(profile, {
+        "repos": {
+            conflicting_repo_id: {
+                "repo_id": conflicting_repo_id,
+                "path": repo.path,
+                "fingerprint": conflicting_fingerprint,
+                "origin": repo.origin,
+                "head": repo.head,
+                "status": "active",
+                "successful_snapshot_ids": ["old-snapshot"],
+            }
+        }
+    })
+
+    plan = snapshot_plan(profile)
+
+    assert plan["repos"] == []
+    assert plan["alerts"][0]["code"] == "active_path_identity_conflict"
 
 
 def test_purge_plan_refuses_active_repo(tmp_path):
@@ -297,3 +392,80 @@ def test_snapshot_health_accepts_google_drive_remote_with_client_id(tmp_path):
 
     assert result["ok"] is True
     assert result["checks"]["rclone_drive_client_id"]["ok"] is True
+
+
+def test_snapshot_health_accepts_default_drive_client_when_profile_allows_it(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path, "allow_default_rclone_drive_client: true")))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+
+    def run_side_effect(args, **kwargs):
+        if args[:3] == ["rclone", "config", "show"]:
+            return MagicMock(returncode=0, stdout="[ALIEN001-GD]\ntype = drive\nscope = drive\n", stderr="")
+        return MagicMock(returncode=0, stdout="restic 0.19.0\n", stderr="")
+
+    with patch("bbackup.snapshot.shutil.which", return_value="/usr/bin/tool"), \
+         patch("bbackup.snapshot.socket.gethostname", return_value="test-host"), \
+         patch("bbackup.snapshot.subprocess.run", side_effect=run_side_effect):
+        result = check_snapshot_profile(profile)
+
+    assert result["ok"] is True
+    assert result["checks"]["rclone_drive_client_id"]["ok"] is True
+    assert "explicit profile configuration" in result["checks"]["rclone_drive_client_id"]["message"]
+
+
+def test_snapshot_check_enforces_google_drive_client_id_or_opt_in(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+
+    def run_side_effect(args, **kwargs):
+        if args[:3] == ["rclone", "config", "show"]:
+            return MagicMock(returncode=0, stdout="[ALIEN001-GD]\ntype = drive\nscope = drive\n", stderr="")
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    with patch("bbackup.snapshot.shutil.which", return_value="/usr/bin/tool"), \
+         patch("bbackup.snapshot.subprocess.run", side_effect=run_side_effect):
+        try:
+            snapshot_check(profile)
+        except SnapshotError as exc:
+            assert "no client_id" in str(exc)
+        else:
+            raise AssertionError("snapshot_check should enforce Google Drive client_id")
+
+
+def test_schedule_units_include_matching_services_for_all_timers(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(
+        tmp_path,
+        (
+            'schedule:\n'
+            '              daily_time: "02:15"\n'
+            '              maintenance_time: "Sun 04:30"\n'
+            '              verification_time: "monthly"\n'
+            '              verification_read_data_subset: "10%"'
+        ),
+    )))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    from bbackup.snapshot import schedule_units
+
+    units = schedule_units(profile)
+
+    assert "bbackup-test-host-essentials-daily.service" in units
+    assert "bbackup-test-host-essentials-daily.timer" in units
+    assert "bbackup-test-host-essentials-daily-maintenance.service" in units
+    assert "bbackup-test-host-essentials-daily-maintenance.timer" in units
+    assert "bbackup-test-host-essentials-daily-verification.service" in units
+    assert "bbackup-test-host-essentials-daily-verification.timer" in units
+    assert "snapshot run --profile essentials-daily" in units["bbackup-test-host-essentials-daily.service"]
+    assert "snapshot check --profile essentials-daily\n" in units[
+        "bbackup-test-host-essentials-daily-maintenance.service"
+    ]
+    assert "--read-data-subset 10%%" in units["bbackup-test-host-essentials-daily-verification.service"]
+
+
+def test_schedule_units_escape_default_percent_in_verification_subset(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    from bbackup.snapshot import schedule_units
+
+    units = schedule_units(profile)
+
+    assert "--read-data-subset 5%%" in units["bbackup-test-host-essentials-daily-verification.service"]

@@ -218,6 +218,9 @@ snapshot_profiles:
     engine: restic
     host_id: SCAR01
     repository: rclone:ALIEN001-GD:backups/SCAR01/restic/essentials-daily
+    # Prefer a dedicated Google Drive rclone OAuth client. Set this only as an
+    # explicit YAML boolean true when accepting rclone's shared default client.
+    allow_default_rclone_drive_client: false
     cache_dir: ~/.cache/bbackup/restic/SCAR01/essentials-daily
     state_dir: ~/.local/state/bbackup/SCAR01/essentials-daily
     password_file: ~/.local/share/bbackup-credentials/restic/SCAR01/essentials-daily.password
@@ -233,6 +236,10 @@ snapshot_profiles:
 
 The password file must stay outside selected backup paths and should be `0600`.
 Escrow the password outside the backup.
+
+Google Drive rclone remotes should use a dedicated OAuth `client_id`. A profile
+may opt into rclone's shared default Drive client with
+`allow_default_rclone_drive_client: true`; quoted strings do not enable it.
 
 Plan, initialize, run, check, restore, retire, purge-plan, and render schedule
 units with:
@@ -252,6 +259,9 @@ bbackup snapshot run --profile essentials-daily
 Deleted Git repositories are marked retired only after at least one successful
 snapshot. Automated retention must target active repo IDs or configured path
 scopes; use `snapshot purge-plan` for dry-run-first retired-repo purges.
+Rendered schedule units include a daily `snapshot run`, weekly non-destructive
+`snapshot check`, and monthly `snapshot check --read-data-subset`, defaulting
+to `5%` unless `schedule.verification_read_data_subset` is set.
 
 ---
 

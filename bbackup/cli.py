@@ -26,7 +26,7 @@ from .tui import BackupTUI, BackupStatus
 from .remote import RemoteStorageManager
 from .archive import create_solid_archive, is_solid_archive_name, unpack_solid_archive
 from .backup_runner import BackupRunner
-from .restore import DockerRestore, list_volume_backup_names
+from .restore import DockerRestore, list_available_backups, list_volume_backup_names
 from .logging import setup_logging
 from .encryption import EncryptionManager
 from .snapshot import (
@@ -694,8 +694,6 @@ def restore(
     if not backup_path.exists():
         json_error("restore", f"Backup path does not exist: {backup_path}", EXIT_USER_ERROR, output)
 
-    restore_mgr = DockerRestore(config)
-
     rename_map = {}
     if rename:
         for mapping in rename:
@@ -737,6 +735,21 @@ def restore(
             output,
         )
 
+    if filesystems_to_restore and fs_destination is None:
+        json_error(
+            "restore",
+            "Filesystem restore requires --filesystem-destination",
+            EXIT_USER_ERROR,
+            output,
+        )
+    if filesystems_to_restore and len(filesystems_to_restore) > 1:
+        json_error(
+            "restore",
+            "Restore one filesystem target at a time; multiple filesystem targets cannot share one destination",
+            EXIT_USER_ERROR,
+            output,
+        )
+
     # Gap 9: dry-run
     if dry_run:
         plan = {
@@ -754,24 +767,10 @@ def restore(
             console.print("[cyan]Dry-run: no restore executed.[/cyan]")
         sys.exit(EXIT_SUCCESS)
 
-    if filesystems_to_restore and fs_destination is None:
-        json_error(
-            "restore",
-            "Filesystem restore requires --filesystem-destination",
-            EXIT_USER_ERROR,
-            output,
-        )
-    if filesystems_to_restore and len(filesystems_to_restore) > 1:
-        json_error(
-            "restore",
-            "Restore one filesystem target at a time; multiple filesystem targets cannot share one destination",
-            EXIT_USER_ERROR,
-            output,
-        )
-
     if output != "json":
         console.print(f"[bold]Restoring from backup: {backup_path}[/bold]\n")
 
+    restore_mgr = DockerRestore(config)
     results = restore_mgr.restore_backup(
         backup_path=backup_path,
         containers=containers_to_restore,
@@ -943,8 +942,7 @@ def list_backups(ctx, backup_dir, skills, output, input_json):
     console: Console = ctx.obj["console"]
 
     backup_path = Path(backup_dir) if backup_dir else Path(config.get_staging_dir())
-    restore_mgr = DockerRestore(config)
-    backups = restore_mgr.list_backups(backup_path)
+    backups = list_available_backups(backup_path)
 
     backups_data = [
         {
