@@ -111,6 +111,16 @@ class TestHealth:
         assert "python_packages" in result
         assert "overall" in result
 
+    def test_run_health_check_reports_config_load_failure(self, mock_docker_client):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="v3\n", stderr="")
+            with patch("bbackup.management.health.Config", side_effect=ValueError("bad yaml")):
+                result = health_module.run_health_check()
+
+        assert result["snapshot_profiles"]["ok"] is False
+        assert "bad yaml" in result["snapshot_profiles"]["error"]
+        assert result["all_critical_ok"] is False
+
     def _make_full_results(self, healthy=True):
         return {
             "docker": (healthy, "Docker 24.0.0 accessible"),

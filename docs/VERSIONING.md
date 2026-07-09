@@ -10,6 +10,11 @@ references must match it before publishing:
 - `CHANGELOG.md` current release header and `[Unreleased]` compare target
 - generated CLI skills docs
 
+Normal release batches use a patch bump by default, including commits with
+`feat:` subjects. Use a `Release-Type: major|minor|patch|none` trailer in the
+commit body when a release needs a non-default impact or an explicit no-bump
+decision.
+
 Run the version sync check:
 
 ```bash

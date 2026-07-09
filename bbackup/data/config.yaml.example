@@ -186,6 +186,62 @@ filesystem:
         excludes:
           - "*.log"
 
+# Native deduplicating snapshot profiles.
+# Restic encrypts content and metadata. Keep password files outside selected
+# backup paths, chmod 0600, and escrow the password out-of-band.
+snapshot_profiles:
+  essentials-daily:
+    engine: restic
+    host_id: WORKSTATION01
+    repository: rclone:my-drive:backups/WORKSTATION01/restic/essentials-daily
+    # Prefer a dedicated Google Drive rclone OAuth client. Set this only as an
+    # explicit YAML boolean true when accepting rclone's shared default client.
+    allow_default_rclone_drive_client: false
+    cache_dir: ~/.cache/bbackup/restic/WORKSTATION01/essentials-daily
+    state_dir: ~/.local/state/bbackup/WORKSTATION01/essentials-daily
+    password_file: ~/.local/share/bbackup-credentials/restic/WORKSTATION01/essentials-daily.password
+    retry_lock: 5m
+    repo_homes:
+      - ~/Projects
+      - ~/Work
+    explicit_repos:
+      - ~/workstation-control
+    include_paths:
+      - ~/.codex
+      - ~/.config/my-agent
+      - ~/.local/share/my-agent
+      - ~/.local/state/my-agent
+      - ~/.config/bbackup
+      - ~/.config/rclone
+      - ~/.config/systemd/user
+      - ~/.ssh
+      - ~/.pki
+      - ~/.gitconfig
+      - ~/.bashrc
+      - ~/.profile
+      - ~/.tmux.conf
+      - ~/.config/gh
+      - ~/Documents
+      - ~/Pictures
+    exclude_paths:
+      - ~/Projects/archives
+      - ~/Projects/starred-repos
+      - ~/Projects/migration-staging
+      - ~/CloudDrive
+      - ~/.config/bbackup/restic
+      - ~/.cache
+      - "**/node_modules"
+      - "**/.venv"
+    retention:
+      active_repo_daily: 14
+      active_repo_weekly: 8
+      active_repo_monthly: 12
+    schedule:
+      daily_time: "03:30"
+      maintenance_time: "Sun 04:30"
+      verification_time: "monthly"
+      verification_read_data_subset: "5%"
+
 # Docker Settings
 docker:
   socket: /var/run/docker.sock

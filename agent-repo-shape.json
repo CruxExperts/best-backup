@@ -1,0 +1,23 @@
+{
+  "agent_clients": [
+    "codex",
+    "opencode"
+  ],
+  "external_skills": [],
+  "platform_overrides": {
+    "codex": {
+      "enabled": true
+    },
+    "opencode": {
+      "enabled": true
+    }
+  },
+  "profile": "lean-universal",
+  "repo": {
+    "name": "bbackup"
+  },
+  "repo_profile": "universal-agent-repo",
+  "repo_skills": [],
+  "schema_version": "1",
+  "shared_skill_surface": ".agents/skills"
+}

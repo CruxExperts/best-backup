@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bbackup"
-version = "1.8.4"
+version = "1.8.5"
 description = "Docker Backup Tool with Rich TUI"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -73,7 +73,7 @@ include = ["bbackup*"]
 testpaths = ["tests"]
 addopts = "--tb=short -q"
 markers = [
-  "integration: marks tests requiring a live Docker daemon (deselect with -m 'not integration')",
+  "integration: marks tests requiring live external tools such as Docker or restic (deselect with -m 'not integration')",
 ]
 
 [tool.ruff]

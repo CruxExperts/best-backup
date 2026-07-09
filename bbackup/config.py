@@ -45,6 +45,27 @@ class FilesystemBackupSet:
     targets: List[FilesystemTarget] = field(default_factory=list)
 
 
+@dataclass
+class SnapshotProfile:
+    """Native snapshot backup profile."""
+    name: str
+    engine: str = "restic"
+    repository: str = ""
+    password_file: str = ""
+    cache_dir: str = ""
+    state_dir: str = ""
+    host_id: str = ""
+    repo_homes: List[str] = field(default_factory=list)
+    explicit_repos: List[str] = field(default_factory=list)
+    include_paths: List[str] = field(default_factory=list)
+    exclude_paths: List[str] = field(default_factory=list)
+    retention: Dict[str, Any] = field(default_factory=dict)
+    schedule: Dict[str, Any] = field(default_factory=dict)
+    retry_lock: str = "5m"
+    tags: List[str] = field(default_factory=list)
+    allow_default_rclone_drive_client: bool = False
+
+
 RCLONE_OPTIONS_CAP = 32
 RCLONE_DEFAULT_TRANSFERS = 8
 RCLONE_DEFAULT_CHECKERS = 8
@@ -133,6 +154,7 @@ class Config:
         self.data: Dict[str, Any] = {}
         self.backup_sets: Dict[str, BackupSet] = {}
         self.filesystem_sets: Dict[str, FilesystemBackupSet] = {}
+        self.snapshot_profiles: Dict[str, SnapshotProfile] = {}
         self.remotes: Dict[str, RemoteStorage] = {}
         self.retention = RetentionPolicy()
         self.incremental = IncrementalSettings()
@@ -249,6 +271,33 @@ class Config:
                 targets=targets,
             )
 
+        # Parse native snapshot profiles
+        for profile_name, profile_data in self.data.get("snapshot_profiles", {}).items():
+            if profile_data is None:
+                profile_data = {}
+            if not isinstance(profile_data, dict):
+                raise ValueError(f"Snapshot profile '{profile_name}' must be a mapping")
+            self.snapshot_profiles[profile_name] = SnapshotProfile(
+                name=profile_name,
+                engine=profile_data.get("engine", "restic"),
+                repository=profile_data.get("repository", ""),
+                password_file=profile_data.get("password_file", ""),
+                cache_dir=profile_data.get("cache_dir", ""),
+                state_dir=profile_data.get("state_dir", ""),
+                host_id=profile_data.get("host_id", ""),
+                repo_homes=list(profile_data.get("repo_homes", []) or []),
+                explicit_repos=list(profile_data.get("explicit_repos", []) or []),
+                include_paths=list(profile_data.get("include_paths", []) or []),
+                exclude_paths=list(profile_data.get("exclude_paths", []) or []),
+                retention=dict(profile_data.get("retention", {}) or {}),
+                schedule=dict(profile_data.get("schedule", {}) or {}),
+                retry_lock=str(profile_data.get("retry_lock", "5m")),
+                tags=list(profile_data.get("tags", []) or []),
+                allow_default_rclone_drive_client=(
+                    profile_data.get("allow_default_rclone_drive_client") is True
+                ),
+            )
+
         # Parse top-level rclone default options
         if "rclone" in self.data:
             rclone_data = self.data["rclone"]
@@ -355,6 +404,10 @@ class Config:
     def get_backup_set(self, name: str) -> Optional[BackupSet]:
         """Get backup set by name."""
         return self.backup_sets.get(name)
+
+    def get_snapshot_profile(self, name: str) -> Optional[SnapshotProfile]:
+        """Get native snapshot profile by name."""
+        return self.snapshot_profiles.get(name)
     
     def get_enabled_remotes(self) -> List[RemoteStorage]:
         """Get list of enabled remote storage destinations."""

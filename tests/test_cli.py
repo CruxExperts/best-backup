@@ -131,9 +131,10 @@ class TestListBackupsCommand:
         result = CliRunner().invoke(cli, ["list-backups"])
         assert result.exit_code == 0
 
-    def test_lists_backup_dirs(self, tmp_path, mock_docker_client):
+    def test_lists_backup_dirs(self, tmp_path):
         (tmp_path / "backup_20240101_000000").mkdir()
-        result = CliRunner().invoke(cli, ["list-backups", "--backup-dir", str(tmp_path)])
+        with patch("bbackup.cli.DockerRestore", side_effect=AssertionError("Docker should not be used")):
+            result = CliRunner().invoke(cli, ["list-backups", "--backup-dir", str(tmp_path)])
         assert result.exit_code == 0
         assert "backup_20240101_000000" in result.output
 
@@ -921,12 +922,12 @@ class TestDryRun:
         assert result.exit_code == EXIT_SUCCESS
 
     def test_restore_dry_run_does_not_call_restore_backup(self, tmp_path):
-        with patch("bbackup.cli.DockerRestore") as MockRestore:
-            CliRunner().invoke(
+        with patch("bbackup.cli.DockerRestore", side_effect=AssertionError("Docker should not be used")):
+            result = CliRunner().invoke(
                 cli,
                 ["restore", "--backup-path", str(tmp_path), "--containers", "myapp", "--dry-run"],
             )
-            MockRestore.return_value.restore_backup.assert_not_called()
+        assert result.exit_code == EXIT_SUCCESS
 
     def test_dry_run_output_shape(self, mock_docker_client):
         mock_docker_client.containers.list.return_value = []
@@ -946,10 +947,11 @@ class TestDryRun:
         volumes_dir.mkdir()
         (volumes_dir / "myvolume.tar.gz").write_bytes(b"")
 
-        result = CliRunner().invoke(
-            cli,
-            ["restore", "--backup-path", str(tmp_path), "--all", "--dry-run", "--output", "json"],
-        )
+        with patch("bbackup.cli.DockerRestore", side_effect=AssertionError("Docker should not be used")):
+            result = CliRunner().invoke(
+                cli,
+                ["restore", "--backup-path", str(tmp_path), "--all", "--dry-run", "--output", "json"],
+            )
 
         assert result.exit_code == EXIT_SUCCESS
         data = json.loads(result.output)
@@ -969,10 +971,21 @@ class TestDryRun:
         with tarfile.open(archive_path, "w:gz") as tar:
             tar.add(backup_root, arcname=backup_root.name)
 
-        result = CliRunner().invoke(
-            cli,
-            ["restore", "--backup-path", str(archive_path), "--all", "--dry-run", "--output", "json"],
-        )
+        with patch("bbackup.cli.DockerRestore", side_effect=AssertionError("Docker should not be used")):
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "restore",
+                    "--backup-path",
+                    str(archive_path),
+                    "--all",
+                    "--filesystem-destination",
+                    str(tmp_path / "restore"),
+                    "--dry-run",
+                    "--output",
+                    "json",
+                ],
+            )
 
         assert result.exit_code == EXIT_SUCCESS
         data = json.loads(result.output)
@@ -998,6 +1011,19 @@ class TestDryRun:
         data = json.loads(result.output)
         assert "Filesystem restore requires --filesystem-destination" in data["errors"]
         MockRestore.return_value.restore_backup.assert_not_called()
+
+    def test_restore_all_dry_run_with_filesystem_requires_destination_before_docker(self, tmp_path):
+        (tmp_path / "filesystems" / "documents").mkdir(parents=True)
+
+        with patch("bbackup.cli.DockerRestore", side_effect=AssertionError("Docker should not be used")):
+            result = CliRunner().invoke(
+                cli,
+                ["restore", "--backup-path", str(tmp_path), "--all", "--dry-run", "--output", "json"],
+            )
+
+        assert result.exit_code == EXIT_USER_ERROR
+        data = json.loads(result.output)
+        assert "Filesystem restore requires --filesystem-destination" in data["errors"]
 
     def test_restore_rejects_multiple_filesystems_sharing_destination_before_restore(self, tmp_path):
         destination = tmp_path / "restore"
@@ -1027,6 +1053,35 @@ class TestDryRun:
             for error in data["errors"]
         )
         MockRestore.return_value.restore_backup.assert_not_called()
+
+    def test_restore_dry_run_rejects_multiple_filesystems_before_docker(self, tmp_path):
+        destination = tmp_path / "restore"
+
+        with patch("bbackup.cli.DockerRestore", side_effect=AssertionError("Docker should not be used")):
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "restore",
+                    "--backup-path",
+                    str(tmp_path),
+                    "--filesystem",
+                    "documents",
+                    "--filesystem",
+                    "photos",
+                    "--filesystem-destination",
+                    str(destination),
+                    "--dry-run",
+                    "--output",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == EXIT_USER_ERROR
+        data = json.loads(result.output)
+        assert any(
+            "multiple filesystem targets cannot share one destination" in error
+            for error in data["errors"]
+        )
 
 
 # ---------------------------------------------------------------------------

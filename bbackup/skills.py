@@ -374,6 +374,209 @@ BBACKUP_SKILLS: Dict[str, Any] = {
         "exit_codes": {0: "success", 1: "user error", 3: "system error"},
     },
 
+    "snapshot-workflow": {
+        "id": "snapshot-workflow",
+        "summary": "Plan, initialize, run, verify, restore, and retire native restic snapshot backups.",
+        "common": True,
+        "workflow": [
+            "snapshot plan",
+            "snapshot init",
+            "snapshot run",
+            "snapshot check",
+            "snapshot restore",
+            "snapshot retire",
+            "snapshot purge-plan",
+            "snapshot schedule",
+        ],
+        "steps": [
+            {
+                "command": "bbackup snapshot plan --profile <name> --output json",
+                "description": "Resolve a configured snapshot profile without executing restic.",
+                "required_flags": ["--profile"],
+                "optional_flags": {
+                    "--profile": "snapshot profile name from config",
+                    "--output": "text or json",
+                    "--input-json": "all params as flat JSON object",
+                },
+                "valid_values": {"--output": ["text", "json"]},
+                "input_json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "profile": {"type": "string"},
+                        "output": {"type": "string", "enum": ["text", "json"]},
+                    },
+                    "required": ["profile"],
+                },
+            },
+            {
+                "command": "bbackup snapshot init --profile <name> --dry-run --output json",
+                "description": "Initialize the restic repository for a snapshot profile; dry-run previews the operation.",
+                "required_flags": ["--profile"],
+                "optional_flags": {
+                    "--profile": "snapshot profile name from config",
+                    "--dry-run": "return the planned operation without executing",
+                    "--output": "text or json",
+                    "--input-json": "all params as flat JSON object",
+                },
+                "valid_values": {"--output": ["text", "json"]},
+                "input_json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "profile": {"type": "string"},
+                        "dry_run": {"type": "boolean", "default": False},
+                        "output": {"type": "string", "enum": ["text", "json"]},
+                    },
+                    "required": ["profile"],
+                },
+            },
+            {
+                "command": "bbackup snapshot run --profile <name> --output json",
+                "description": "Run the native deduplicating snapshot backup for a configured profile.",
+                "required_flags": ["--profile"],
+                "optional_flags": {
+                    "--profile": "snapshot profile name from config",
+                    "--dry-run": "return the planned operation without executing",
+                    "--output": "text or json",
+                    "--input-json": "all params as flat JSON object",
+                },
+                "valid_values": {"--output": ["text", "json"]},
+                "input_json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "profile": {"type": "string"},
+                        "dry_run": {"type": "boolean", "default": False},
+                        "output": {"type": "string", "enum": ["text", "json"]},
+                    },
+                    "required": ["profile"],
+                },
+            },
+            {
+                "command": "bbackup snapshot check --profile <name> --read-data-subset 5% --output json",
+                "description": "Check a snapshot repository, optionally checking a subset of stored data.",
+                "required_flags": ["--profile"],
+                "optional_flags": {
+                    "--profile": "snapshot profile name from config",
+                    "--read-data-subset": "pass through to restic check",
+                    "--dry-run": "return the planned operation without executing",
+                    "--output": "text or json",
+                    "--input-json": "all params as flat JSON object",
+                },
+                "valid_values": {"--output": ["text", "json"]},
+                "input_json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "profile": {"type": "string"},
+                        "read_data_subset": {"type": "string"},
+                        "dry_run": {"type": "boolean", "default": False},
+                        "output": {"type": "string", "enum": ["text", "json"]},
+                    },
+                    "required": ["profile"],
+                },
+            },
+            {
+                "command": "bbackup snapshot restore --profile <name> --snapshot-id <id> --target <empty-dir> --output json",
+                "description": "Restore a restic snapshot into an empty target directory.",
+                "required_flags": ["--profile", "--snapshot-id", "--target"],
+                "optional_flags": {
+                    "--profile": "snapshot profile name from config",
+                    "--snapshot-id": "restic snapshot ID to restore",
+                    "--target": "empty restore target directory",
+                    "--include": "optional restic include filter",
+                    "--dry-run": "return the planned operation without executing",
+                    "--output": "text or json",
+                    "--input-json": "all params as flat JSON object",
+                },
+                "valid_values": {"--output": ["text", "json"]},
+                "input_json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "profile": {"type": "string"},
+                        "snapshot_id": {"type": "string"},
+                        "target": {"type": "string"},
+                        "include_path": {"type": "string"},
+                        "dry_run": {"type": "boolean", "default": False},
+                        "output": {"type": "string", "enum": ["text", "json"]},
+                    },
+                    "required": ["profile", "snapshot_id", "target"],
+                },
+            },
+            {
+                "command": "bbackup snapshot retire --profile <name> --repo-id <id> --output json",
+                "description": "Mark a repo as retired after it has at least one successful snapshot.",
+                "required_flags": ["--profile", "--repo-id"],
+                "optional_flags": {
+                    "--profile": "snapshot profile name from config",
+                    "--repo-id": "repo ID to mark retired",
+                    "--output": "text or json",
+                    "--input-json": "all params as flat JSON object",
+                },
+                "valid_values": {"--output": ["text", "json"]},
+                "input_json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "profile": {"type": "string"},
+                        "repo_id": {"type": "string"},
+                        "output": {"type": "string", "enum": ["text", "json"]},
+                    },
+                    "required": ["profile", "repo_id"],
+                },
+            },
+            {
+                "command": "bbackup snapshot purge-plan --profile <name> --repo-id <id> --output json",
+                "description": "Build a dry-run-first purge plan for retired snapshot storage.",
+                "required_flags": ["--profile", "--repo-id"],
+                "optional_flags": {
+                    "--profile": "snapshot profile name from config",
+                    "--repo-id": "retired repo ID to plan for purge",
+                    "--output": "text or json",
+                    "--input-json": "all params as flat JSON object",
+                },
+                "valid_values": {"--output": ["text", "json"]},
+                "input_json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "profile": {"type": "string"},
+                        "repo_id": {"type": "string"},
+                        "output": {"type": "string", "enum": ["text", "json"]},
+                    },
+                    "required": ["profile", "repo_id"],
+                },
+            },
+            {
+                "command": "bbackup snapshot schedule --profile <name> --output json",
+                "description": "Render user systemd service and timer units for a snapshot profile.",
+                "required_flags": ["--profile"],
+                "optional_flags": {
+                    "--profile": "snapshot profile name from config",
+                    "--output": "text or json",
+                    "--input-json": "all params as flat JSON object",
+                },
+                "valid_values": {"--output": ["text", "json"]},
+                "input_json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "profile": {"type": "string"},
+                        "output": {"type": "string", "enum": ["text", "json"]},
+                    },
+                    "required": ["profile"],
+                },
+            },
+        ],
+        "examples": [
+            "bbackup snapshot plan --profile essentials-daily --output json",
+            "bbackup snapshot init --profile essentials-daily --dry-run --output json",
+            "bbackup snapshot run --profile essentials-daily --output json",
+            "bbackup snapshot check --profile essentials-daily --read-data-subset 5% --output json",
+            "bbackup snapshot restore --profile essentials-daily --snapshot-id abc123 --target /tmp/restore --dry-run --output json",
+            "bbackup snapshot schedule --profile essentials-daily --output json",
+        ],
+        "output_format": (
+            '{"profile": "...", "repository": "...", "actions": [...], '
+            '"alerts": [], "results": [...], "units": {...}}'
+        ),
+        "exit_codes": {0: "success", 1: "user error", 3: "system error"},
+    },
+
     "remote-storage": {
         "id": "remote-storage",
         "summary": "List backups stored on remote storage destinations.",

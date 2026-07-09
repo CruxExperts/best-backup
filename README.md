@@ -6,7 +6,7 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.8.4-6366f1?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.8.5-6366f1?style=flat-square)](CHANGELOG.md)
 
 [Quick start](#quick-start) · [Filesystem backup](#filesystem-backup) · [Agent integration](#agent-integration) · [CLI reference](#cli-reference) · [Docs](#documentation)
 
@@ -206,6 +206,63 @@ Or pass paths directly, no config needed:
 bbackup backup --paths /home/user/docs /srv/data --exclude "*.tmp"
 ```
 
+### Native restic snapshots
+
+Add a top-level `snapshot_profiles:` section for encrypted deduplicating restic
+snapshots. bbackup owns discovery, safety checks, state, and scheduling while
+restic owns the snapshot repository.
+
+```yaml
+snapshot_profiles:
+  essentials-daily:
+    engine: restic
+    host_id: WORKSTATION01
+    repository: rclone:my-drive:backups/WORKSTATION01/restic/essentials-daily
+    # Prefer a dedicated Google Drive rclone OAuth client. Set this only as an
+    # explicit YAML boolean true when accepting rclone's shared default client.
+    allow_default_rclone_drive_client: false
+    cache_dir: ~/.cache/bbackup/restic/WORKSTATION01/essentials-daily
+    state_dir: ~/.local/state/bbackup/WORKSTATION01/essentials-daily
+    password_file: ~/.local/share/bbackup-credentials/restic/WORKSTATION01/essentials-daily.password
+    repo_homes:
+      - ~/Projects
+      - ~/Work
+    explicit_repos:
+      - /home/user/my-control-repo
+    include_paths:
+      - ~/.config/bbackup
+      - ~/Documents
+```
+
+The password file must stay outside selected backup paths and should be `0600`.
+Escrow the password outside the backup.
+
+Google Drive rclone remotes should use a dedicated OAuth `client_id`. A profile
+may opt into rclone's shared default Drive client with
+`allow_default_rclone_drive_client: true`; quoted strings do not enable it.
+
+Plan, initialize, run, check, restore, retire, purge-plan, and render schedule
+units with:
+
+```bash
+bbackup snapshot plan --profile essentials-daily --output json
+```
+
+```bash
+bbackup snapshot init --profile essentials-daily --dry-run --output json
+```
+
+```bash
+bbackup snapshot run --profile essentials-daily
+```
+
+Deleted Git repositories are marked retired only after at least one successful
+snapshot. Automated retention must target active repo IDs or configured path
+scopes; use `snapshot purge-plan` for dry-run-first retired-repo purges.
+Rendered schedule units include a daily `snapshot run`, weekly non-destructive
+`snapshot check`, and monthly `snapshot check --read-data-subset`, defaulting
+to `5%` unless `schedule.verification_read_data_subset` is set.
+
 ---
 
 ## CLI reference
@@ -320,7 +377,7 @@ Level-0 JSON output:
 ```json
 {
   "cli": "bbackup",
-  "version": "1.8.4",
+  "version": "1.8.5",
   "agent_hint": "Set BBACKUP_OUTPUT=json and BBACKUP_NO_INTERACTIVE=1 for fully non-interactive use.",
   "skills": [
     {"id": "docker-backup",     "summary": "Back up Docker containers, volumes, networks, and configs.", "common": true},

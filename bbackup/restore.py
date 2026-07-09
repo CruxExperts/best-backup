@@ -52,6 +52,41 @@ def list_volume_backup_names(backup_path: Path) -> List[str]:
     return sorted(names)
 
 
+def list_available_backups(backup_dir: Path) -> List[Dict]:
+    """List available local backups in a directory without connecting to Docker."""
+    backups = []
+    if not backup_dir.exists():
+        return backups
+    items = list(backup_dir.iterdir())
+    for backup_path in sorted(items, key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
+        if backup_path.is_dir() and backup_path.name.startswith("backup_"):
+            metadata_file = backup_path / "backup_metadata.json"
+            timestamp = None
+            if metadata_file.exists():
+                try:
+                    with open(metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                        timestamp = metadata.get("timestamp")
+                except Exception:
+                    pass
+            if not timestamp:
+                try:
+                    name_part = backup_path.name.replace("backup_", "")
+                    timestamp = datetime.strptime(name_part, "%Y%m%d_%H%M%S").isoformat()
+                except Exception:
+                    timestamp = backup_path.name
+            backups.append({"name": backup_path.name, "path": backup_path, "timestamp": timestamp})
+        elif backup_path.is_file() and is_solid_archive_name(backup_path.name):
+            try:
+                base = strip_solid_archive_suffix(backup_path.name)
+                name_part = base.replace("backup_", "")
+                timestamp = datetime.strptime(name_part, "%Y%m%d_%H%M%S").isoformat()
+            except Exception:
+                timestamp = backup_path.name
+            backups.append({"name": backup_path.name, "path": backup_path, "timestamp": timestamp})
+    return backups
+
+
 class DockerRestore:
     """Docker restore manager."""
     
@@ -66,37 +101,7 @@ class DockerRestore:
     
     def list_backups(self, backup_dir: Path) -> List[Dict]:
         """List available backups in backup directory (dirs and solid archive files)."""
-        backups = []
-        if not backup_dir.exists():
-            return backups
-        items = list(backup_dir.iterdir())
-        for backup_path in sorted(items, key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
-            if backup_path.is_dir() and backup_path.name.startswith("backup_"):
-                metadata_file = backup_path / "backup_metadata.json"
-                timestamp = None
-                if metadata_file.exists():
-                    try:
-                        with open(metadata_file, 'r') as f:
-                            metadata = json.load(f)
-                            timestamp = metadata.get("timestamp")
-                    except Exception:
-                        pass
-                if not timestamp:
-                    try:
-                        name_part = backup_path.name.replace("backup_", "")
-                        timestamp = datetime.strptime(name_part, "%Y%m%d_%H%M%S").isoformat()
-                    except Exception:
-                        timestamp = backup_path.name
-                backups.append({"name": backup_path.name, "path": backup_path, "timestamp": timestamp})
-            elif backup_path.is_file() and is_solid_archive_name(backup_path.name):
-                try:
-                    base = strip_solid_archive_suffix(backup_path.name)
-                    name_part = base.replace("backup_", "")
-                    timestamp = datetime.strptime(name_part, "%Y%m%d_%H%M%S").isoformat()
-                except Exception:
-                    timestamp = backup_path.name
-                backups.append({"name": backup_path.name, "path": backup_path, "timestamp": timestamp})
-        return backups
+        return list_available_backups(backup_dir)
     
     def restore_container_config(self, container_name: str, backup_path: Path, new_name: Optional[str] = None) -> bool:
         """Restore container from backup configuration."""

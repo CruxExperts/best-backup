@@ -26,9 +26,21 @@ from .tui import BackupTUI, BackupStatus
 from .remote import RemoteStorageManager
 from .archive import create_solid_archive, is_solid_archive_name, unpack_solid_archive
 from .backup_runner import BackupRunner
-from .restore import DockerRestore, list_volume_backup_names
+from .restore import DockerRestore, list_available_backups, list_volume_backup_names
 from .logging import setup_logging
 from .encryption import EncryptionManager
+from .snapshot import (
+    SnapshotError,
+    expand_path,
+    purge_plan,
+    retire_repo,
+    schedule_units,
+    snapshot_check,
+    snapshot_init,
+    snapshot_plan,
+    snapshot_restore,
+    snapshot_run,
+)
 from .resources import read_text_resource, resource_exists
 from .cli_utils import (
     output_option,
@@ -107,6 +119,28 @@ def _backup_encryption_result(status: BackupStatus, backup_path: Path) -> str:
     if status.encryption_status == "failed":
         return "failed"
     return "disabled"
+
+
+def _snapshot_profile_or_exit(config: Config, profile: str, output: str):
+    snapshot_profile = config.get_snapshot_profile(profile)
+    if snapshot_profile is None:
+        json_error("snapshot", f"Snapshot profile not found: {profile}", EXIT_USER_ERROR, output)
+    return snapshot_profile
+
+
+def _snapshot_required_param(ctx: click.Context, name: str, command: str, output: str):
+    value = ctx.params.get(name)
+    if value in (None, ""):
+        json_error(command, f"Missing required option: --{name.replace('_', '-')}", EXIT_USER_ERROR, output)
+    return value
+
+
+def _snapshot_result(command: str, result: dict, output: str, console: Console) -> None:
+    success = bool(result.get("success", result.get("ok", True)))
+    render_output(result, output, command, success=success)
+    if output != "json":
+        console.print_json(data=result)
+    sys.exit(EXIT_SUCCESS if success else EXIT_SYSTEM_ERROR)
 
 
 @click.group()
@@ -448,6 +482,202 @@ def backup(
 
 
 # ---------------------------------------------------------------------------
+# snapshot
+# ---------------------------------------------------------------------------
+
+@cli.group()
+def snapshot():
+    """Native deduplicating snapshot backups."""
+
+
+@snapshot.command("plan")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@output_option
+@input_json_option
+@click.pass_context
+def snapshot_plan_cmd(ctx, profile, output, input_json):
+    """Resolve a snapshot profile without executing restic."""
+    merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot plan", output)
+    config: Config = ctx.obj["config"]
+    console: Console = ctx.obj["console"]
+    snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
+    try:
+        result = snapshot_plan(snapshot_profile)
+        render_output(result, output, "snapshot plan", success=not bool(result.get("alerts")))
+        if output != "json":
+            console.print_json(data=result)
+        sys.exit(EXIT_SYSTEM_ERROR if result.get("alerts") else EXIT_SUCCESS)
+    except SnapshotError as exc:
+        json_error("snapshot plan", str(exc), EXIT_SYSTEM_ERROR, output)
+
+
+@snapshot.command("init")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@output_option
+@input_json_option
+@dry_run_option
+@click.pass_context
+def snapshot_init_cmd(ctx, profile, output, input_json, dry_run):
+    """Initialize the restic repository for a snapshot profile."""
+    merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    dry_run = ctx.params.get("dry_run", dry_run)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot init", output)
+    config: Config = ctx.obj["config"]
+    console: Console = ctx.obj["console"]
+    snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
+    try:
+        _snapshot_result("snapshot init", snapshot_init(snapshot_profile, dry_run=dry_run), output, console)
+    except SnapshotError as exc:
+        json_error("snapshot init", str(exc), EXIT_SYSTEM_ERROR, output)
+
+
+@snapshot.command("run")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@output_option
+@input_json_option
+@dry_run_option
+@click.pass_context
+def snapshot_run_cmd(ctx, profile, output, input_json, dry_run):
+    """Run a native snapshot profile."""
+    merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    dry_run = ctx.params.get("dry_run", dry_run)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot run", output)
+    config: Config = ctx.obj["config"]
+    console: Console = ctx.obj["console"]
+    snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
+    try:
+        _snapshot_result("snapshot run", snapshot_run(snapshot_profile, dry_run=dry_run), output, console)
+    except SnapshotError as exc:
+        json_error("snapshot run", str(exc), EXIT_SYSTEM_ERROR, output)
+
+
+@snapshot.command("check")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@click.option("--read-data-subset", default=None, help="Pass through to restic check")
+@output_option
+@input_json_option
+@dry_run_option
+@click.pass_context
+def snapshot_check_cmd(ctx, profile, read_data_subset, output, input_json, dry_run):
+    """Check a native snapshot repository."""
+    merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    dry_run = ctx.params.get("dry_run", dry_run)
+    read_data_subset = ctx.params.get("read_data_subset", read_data_subset)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot check", output)
+    config: Config = ctx.obj["config"]
+    console: Console = ctx.obj["console"]
+    snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
+    try:
+        result = snapshot_check(snapshot_profile, read_data_subset=read_data_subset, dry_run=dry_run)
+        _snapshot_result("snapshot check", result, output, console)
+    except SnapshotError as exc:
+        json_error("snapshot check", str(exc), EXIT_SYSTEM_ERROR, output)
+
+
+@snapshot.command("restore")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@click.option("--snapshot-id", required=False, help="Restic snapshot ID to restore")
+@click.option("--target", required=False, type=click.Path(), help="Empty restore target directory")
+@click.option("--include", "include_path", default=None, help="Optional restic include filter")
+@output_option
+@input_json_option
+@dry_run_option
+@click.pass_context
+def snapshot_restore_cmd(ctx, profile, snapshot_id, target, include_path, output, input_json, dry_run):
+    """Restore a restic snapshot into a target directory."""
+    merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    dry_run = ctx.params.get("dry_run", dry_run)
+    include_path = ctx.params.get("include_path", include_path)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot restore", output)
+    snapshot_id = _snapshot_required_param(ctx, "snapshot_id", "snapshot restore", output)
+    target = _snapshot_required_param(ctx, "target", "snapshot restore", output)
+    config: Config = ctx.obj["config"]
+    console: Console = ctx.obj["console"]
+    snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
+    target_path = expand_path(target)
+    if not dry_run and target_path.exists() and any(target_path.iterdir()):
+        json_error("snapshot restore", f"Restore target is not empty: {target}", EXIT_USER_ERROR, output)
+    try:
+        result = snapshot_restore(
+            snapshot_profile,
+            snapshot_id=snapshot_id,
+            target=target,
+            include=include_path,
+            dry_run=dry_run,
+        )
+        _snapshot_result("snapshot restore", result, output, console)
+    except SnapshotError as exc:
+        json_error("snapshot restore", str(exc), EXIT_SYSTEM_ERROR, output)
+
+
+@snapshot.command("retire")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@click.option("--repo-id", required=False, help="Repo ID to mark retired")
+@output_option
+@input_json_option
+@click.pass_context
+def snapshot_retire_cmd(ctx, profile, repo_id, output, input_json):
+    """Manually mark a repo as retired after it has a successful snapshot."""
+    merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot retire", output)
+    repo_id = _snapshot_required_param(ctx, "repo_id", "snapshot retire", output)
+    config: Config = ctx.obj["config"]
+    console: Console = ctx.obj["console"]
+    snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
+    try:
+        result = retire_repo(snapshot_profile, repo_id)
+        _snapshot_result("snapshot retire", result, output, console)
+    except SnapshotError as exc:
+        json_error("snapshot retire", str(exc), EXIT_USER_ERROR, output)
+
+
+@snapshot.command("purge-plan")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@click.option("--repo-id", required=False, help="Retired repo ID to plan for purge")
+@output_option
+@input_json_option
+@click.pass_context
+def snapshot_purge_plan_cmd(ctx, profile, repo_id, output, input_json):
+    """Build a dry-run-first purge plan for a retired repo."""
+    merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot purge-plan", output)
+    repo_id = _snapshot_required_param(ctx, "repo_id", "snapshot purge-plan", output)
+    config: Config = ctx.obj["config"]
+    console: Console = ctx.obj["console"]
+    snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
+    try:
+        result = purge_plan(snapshot_profile, repo_id)
+        _snapshot_result("snapshot purge-plan", result, output, console)
+    except SnapshotError as exc:
+        json_error("snapshot purge-plan", str(exc), EXIT_USER_ERROR, output)
+
+
+@snapshot.command("schedule")
+@click.option("--profile", "-p", required=False, help="Snapshot profile name")
+@output_option
+@input_json_option
+@click.pass_context
+def snapshot_schedule_cmd(ctx, profile, output, input_json):
+    """Render user systemd units/timers for a snapshot profile."""
+    merge_json_input(ctx, input_json)
+    output = ctx.params.get("output", output)
+    profile = _snapshot_required_param(ctx, "profile", "snapshot schedule", output)
+    config: Config = ctx.obj["config"]
+    console: Console = ctx.obj["console"]
+    snapshot_profile = _snapshot_profile_or_exit(config, profile, output)
+    result = {"profile": profile, "units": schedule_units(snapshot_profile, config_path=config.config_path)}
+    _snapshot_result("snapshot schedule", result, output, console)
+
+
+# ---------------------------------------------------------------------------
 # restore
 # ---------------------------------------------------------------------------
 
@@ -498,8 +728,6 @@ def restore(
     if not backup_path.exists():
         json_error("restore", f"Backup path does not exist: {backup_path}", EXIT_USER_ERROR, output)
 
-    restore_mgr = DockerRestore(config)
-
     rename_map = {}
     if rename:
         for mapping in rename:
@@ -541,6 +769,21 @@ def restore(
             output,
         )
 
+    if filesystems_to_restore and fs_destination is None:
+        json_error(
+            "restore",
+            "Filesystem restore requires --filesystem-destination",
+            EXIT_USER_ERROR,
+            output,
+        )
+    if filesystems_to_restore and len(filesystems_to_restore) > 1:
+        json_error(
+            "restore",
+            "Restore one filesystem target at a time; multiple filesystem targets cannot share one destination",
+            EXIT_USER_ERROR,
+            output,
+        )
+
     # Gap 9: dry-run
     if dry_run:
         plan = {
@@ -558,24 +801,10 @@ def restore(
             console.print("[cyan]Dry-run: no restore executed.[/cyan]")
         sys.exit(EXIT_SUCCESS)
 
-    if filesystems_to_restore and fs_destination is None:
-        json_error(
-            "restore",
-            "Filesystem restore requires --filesystem-destination",
-            EXIT_USER_ERROR,
-            output,
-        )
-    if filesystems_to_restore and len(filesystems_to_restore) > 1:
-        json_error(
-            "restore",
-            "Restore one filesystem target at a time; multiple filesystem targets cannot share one destination",
-            EXIT_USER_ERROR,
-            output,
-        )
-
     if output != "json":
         console.print(f"[bold]Restoring from backup: {backup_path}[/bold]\n")
 
+    restore_mgr = DockerRestore(config)
     results = restore_mgr.restore_backup(
         backup_path=backup_path,
         containers=containers_to_restore,
@@ -747,8 +976,7 @@ def list_backups(ctx, backup_dir, skills, output, input_json):
     console: Console = ctx.obj["console"]
 
     backup_path = Path(backup_dir) if backup_dir else Path(config.get_staging_dir())
-    restore_mgr = DockerRestore(config)
-    backups = restore_mgr.list_backups(backup_path)
+    backups = list_available_backups(backup_path)
 
     backups_data = [
         {
