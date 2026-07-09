@@ -45,18 +45,18 @@ uv run python -m py_compile bbackup.py bbman.py bbackup/*.py bbackup/data/*.py b
 
 ## Commit messages
 
-This project uses [conventional commits](https://www.conventionalcommits.org/). The prefix determines how the version is bumped on the next release:
+This project uses [conventional commits](https://www.conventionalcommits.org/) for readable history. Normal development batches release as one patch increment unless a commit body includes an explicit `Release-Type: major|minor|patch|none` trailer.
 
 | Prefix | Bump | When to use |
 |---|---|---|
-| `feat:` | minor | New user-visible feature |
+| `feat:` | patch by default | New user-visible feature |
 | `fix:` | patch | Bug fix |
 | `docs:` | patch | Documentation only |
 | `refactor:` | patch | Code restructure, no behavior change |
 | `perf:` | patch | Performance improvement |
 | `test:` | patch | Test additions or changes |
 | `chore:` | patch | Build, tooling, dependency updates |
-| `feat!:` or `BREAKING CHANGE:` in body | major | Incompatible change |
+| `feat!:` or `BREAKING CHANGE:` in body | requires explicit `Release-Type:` | Incompatible change |
 
 One subject line, imperative mood, no trailing period. Example:
 

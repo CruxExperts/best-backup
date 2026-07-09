@@ -1,9 +1,9 @@
 # Bootstrap Planning Agent Prompt
 
-Use this prompt to hand `/mnt/data/devzone/bbackup` to a planning agent.
+Use this prompt to hand the active `bbackup` checkout to a planning agent.
 
 ```text
-You are the planning agent for /mnt/data/devzone/bbackup.
+You are the planning agent for the active `bbackup` checkout.
 
 Objective:
 Turn this checkout into the working maintenance repo for bbackup and Codex-related
@@ -11,7 +11,7 @@ development work without implementing domain changes until the user accepts a
 plan.
 
 Repository context:
-- Repo path: /mnt/data/devzone/bbackup
+- Repo path: `<repo-root>`
 - GitHub remote: https://github.com/CruxExperts/best-backup.git
 - Primary package: bbackup/
 - CLI entry points: bbackup.py, bbman.py, bbackup/cli.py, bbackup/bbman_entry.py
@@ -21,7 +21,7 @@ Repository context:
 Planning task:
 1. Read AGENTS.md, README.md, INSTALL.md, QUICKSTART.md, and docs/README.md.
 2. Inspect Localsetup adapter status with:
-   localsetup adapters --target-directory /mnt/data/devzone/bbackup --platforms codex
+   localsetup adapters --target-directory <repo-root> --platforms codex
 3. Inspect git status.
 4. Produce a concise implementation plan for the requested bbackup maintenance
    work.
@@ -32,8 +32,8 @@ Validation commands to include in the plan:
 - git status --short --ignored
 - uv run python -m py_compile bbackup.py bbman.py bbackup/*.py bbackup/data/*.py bbackup/management/*.py scripts/*.py
 - uv run pytest
-- localsetup adapters --target-directory /mnt/data/devzone/bbackup --platforms codex
-- localsetup doctor --target-directory /mnt/data/devzone/bbackup --global-preset core --repo-preset core --platforms codex --dependency-mode uv-sync --json
+- localsetup adapters --target-directory <repo-root> --platforms codex
+- localsetup doctor --target-directory <repo-root> --global-preset core --repo-preset core --platforms codex --dependency-mode uv-sync --json
 
 Output format:
 - Start with assumptions.

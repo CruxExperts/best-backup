@@ -216,17 +216,17 @@ restic owns the snapshot repository.
 snapshot_profiles:
   essentials-daily:
     engine: restic
-    host_id: SCAR01
-    repository: rclone:ALIEN001-GD:backups/SCAR01/restic/essentials-daily
+    host_id: WORKSTATION01
+    repository: rclone:my-drive:backups/WORKSTATION01/restic/essentials-daily
     # Prefer a dedicated Google Drive rclone OAuth client. Set this only as an
     # explicit YAML boolean true when accepting rclone's shared default client.
     allow_default_rclone_drive_client: false
-    cache_dir: ~/.cache/bbackup/restic/SCAR01/essentials-daily
-    state_dir: ~/.local/state/bbackup/SCAR01/essentials-daily
-    password_file: ~/.local/share/bbackup-credentials/restic/SCAR01/essentials-daily.password
+    cache_dir: ~/.cache/bbackup/restic/WORKSTATION01/essentials-daily
+    state_dir: ~/.local/state/bbackup/WORKSTATION01/essentials-daily
+    password_file: ~/.local/share/bbackup-credentials/restic/WORKSTATION01/essentials-daily.password
     repo_homes:
-      - /mnt/data/devzone
-      - /mnt/data/work
+      - ~/Projects
+      - ~/Work
     explicit_repos:
       - /home/user/my-control-repo
     include_paths:
