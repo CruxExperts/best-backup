@@ -43,7 +43,7 @@ dependencies = [
 
 [project.optional-dependencies]
 management = [
-  "gitpython>=3.1.0",
+  "gitpython>=3.1.54",
 ]
 
 [project.urls]
