@@ -13,6 +13,7 @@ from bbackup.snapshot import (
     check_snapshot_profile,
     discover_git_repos,
     load_state,
+    path_id,
     purge_plan,
     reconcile_repos,
     retire_repo,
@@ -97,6 +98,106 @@ def test_restic_backup_args_include_required_flags(tmp_path):
     assert "test-host" in args
     assert "--tag" in args
     assert "--exclude" in args
+
+
+
+def test_restic_retention_args_use_one_conjunctive_scope_selector(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    args = ResticRunner(profile).retention_args(
+        ["bbackup", "profile=essentials-daily", "scope=repo", "repo_id=abc123"],
+        {"daily": 14, "weekly": 8, "monthly": 12},
+        dry_run=True,
+    )
+
+    tag_index = args.index("--tag")
+    assert args[tag_index + 1] == "bbackup,profile=essentials-daily,scope=repo,repo_id=abc123"
+    assert args.count("--tag") == 1
+    assert "--group-by" in args
+    assert "--keep-daily" in args
+    assert "--keep-weekly" in args
+    assert "--keep-monthly" in args
+    assert "--dry-run" in args
+
+
+def test_snapshot_retention_rejects_fractional_counts(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    profile.retention = {"active_repo_daily": 1.9}
+    init_git_repo(tmp_path / "repos" / "repo-a")
+
+    try:
+        snapshot_plan(profile)
+    except SnapshotError as exc:
+        assert "non-negative integer" in str(exc)
+    else:
+        raise AssertionError("fractional retention count should be rejected")
+
+
+def test_snapshot_plan_retention_only_targets_active_repos_and_paths(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    profile.retention = {
+        "active_repo_daily": 14,
+        "path_daily": 14,
+    }
+    include_path = tmp_path / "Documents"
+    include_path.mkdir()
+    profile.include_paths = [str(include_path)]
+    repo_path = tmp_path / "repos" / "repo-a"
+    init_git_repo(repo_path)
+    active_repo_id = reconcile_repos(profile, discover_git_repos(profile))["active_repo_ids"][0]
+    state = load_state(profile)
+    state["repos"]["retired-id"] = {
+        "repo_id": "retired-id",
+        "path": str(tmp_path / "repos" / "retired"),
+        "status": "retired",
+        "successful_snapshot_ids": ["retired-snapshot"],
+    }
+    save_state(profile, state)
+
+    plan = snapshot_plan(profile)
+
+    identifiers = {item["identifier"] for item in plan["retention"]}
+    assert identifiers == {active_repo_id, path_id(str(include_path))}
+    assert "retired-id" not in identifiers
+    for item in plan["retention"]:
+        assert item["args"].count("--tag") == 1
+        assert "--dry-run" in item["args"]
+        assert item["args"][item["args"].index("--tag") + 1].count(",") >= 3
+
+
+def test_snapshot_run_applies_scoped_retention_after_successful_backup(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    profile.retention = {"active_repo_daily": 14}
+    profile.include_paths = []
+    init_git_repo(tmp_path / "repos" / "repo-a")
+    backup_stdout = json.dumps({"message_type": "summary", "snapshot_id": "b" * 64})
+    successful_result = {
+        "args": [],
+        "returncode": 0,
+        "stdout": backup_stdout,
+        "stderr": "",
+        "ok": True,
+    }
+    retention_result = {**successful_result, "stdout": ""}
+
+    with patch("bbackup.snapshot._require_snapshot_operation_preflight"), patch.object(
+        ResticRunner,
+        "run",
+        side_effect=[successful_result, retention_result],
+    ) as run:
+        result = snapshot_run(profile)
+
+    assert result["success"] is True
+    assert len(result["retention_results"]) == 1
+    retention_args = run.call_args_list[1].args[0]
+    retention_tag = retention_args[retention_args.index("--tag") + 1]
+    assert retention_tag.startswith("bbackup,profile=")
+    assert "scope=repo" in retention_tag
+    assert retention_tag.endswith(f"repo_id={result['results'][0]['repo_id']}")
+
 
 
 def test_restic_backup_args_expand_path_based_excludes(tmp_path, monkeypatch):
@@ -333,16 +434,19 @@ def test_purge_plan_for_retired_repo_is_dry_run_first(tmp_path):
     result = reconcile_repos(profile, discover_git_repos(profile))
     repo_id = result["active_repo_ids"][0]
     state = load_state(profile)
-    state["repos"][repo_id]["successful_snapshot_ids"] = ["abc123"]
-    from bbackup.snapshot import save_state
-
+    snapshot_id = "a" * 64
+    state["repos"][repo_id]["successful_snapshot_ids"] = [snapshot_id]
     save_state(profile, state)
     retire_repo(profile, repo_id)
     plan = purge_plan(profile, repo_id)
     assert plan["dry_run_required"] is True
+    assert plan["selection"] == "exact_snapshot_ids"
+    assert plan["snapshot_ids"] == [snapshot_id]
     assert "--dry-run" in plan["forget_args"]
     assert "--dry-run" not in plan["destructive_args_after_confirmation"]
-    assert f"repo_id={repo_id}" in plan["forget_args"]
+    assert "--tag" not in plan["forget_args"]
+    assert plan["forget_args"][-2:] == ["--", snapshot_id]
+    assert plan["destructive_args_after_confirmation"][-2:] == ["--", snapshot_id]
 
 
 def test_snapshot_plan_cli_json(tmp_path):
@@ -696,6 +800,13 @@ def test_schedule_units_include_matching_services_for_all_timers(tmp_path):
         "bbackup-test-host-essentials-daily-maintenance.service"
     ]
     assert "--read-data-subset 10%%" in units["bbackup-test-host-essentials-daily-verification.service"]
+    expected_lock = "flock --exclusive %t/bbackup-test-host-essentials-daily.lock"
+    for service_name in (
+        "bbackup-test-host-essentials-daily.service",
+        "bbackup-test-host-essentials-daily-maintenance.service",
+        "bbackup-test-host-essentials-daily-verification.service",
+    ):
+        assert expected_lock in units[service_name]
 
 
 def test_schedule_units_escape_default_percent_in_verification_subset(tmp_path):

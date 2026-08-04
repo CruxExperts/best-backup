@@ -10,6 +10,11 @@ current uv-based install, development, and release instructions.
 
 ## [Unreleased]
 
+### Fixed
+
+- Snapshot runs now apply configured active-repository and include-path retention through scoped, conjunctive tag selectors.
+- Generated schedule services share a user-runtime lock so backup, maintenance, and verification jobs do not overlap.
+
 ---
 
 ## [1.8.5] - 2026-07-09

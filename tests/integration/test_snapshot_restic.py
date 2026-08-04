@@ -9,6 +9,8 @@ import pytest
 from bbackup.config import Config
 from bbackup.snapshot import (
     load_state,
+    purge_plan,
+    retire_repo,
     snapshot_check,
     snapshot_init,
     snapshot_restore,
@@ -46,6 +48,8 @@ def _write_local_restic_config(tmp_path):
             retry_lock: 1m
             repo_homes:
               - {tmp_path / "repos"}
+            retention:
+              active_repo_daily: 1
     """), encoding="utf-8")
     return cfg_file
 
@@ -66,6 +70,7 @@ def test_local_restic_snapshot_check_restore_records_state(tmp_path):
 
     run_result = snapshot_run(profile)
     assert run_result["success"] is True
+    assert run_result["retention_results"][0]["ok"] is True
     snapshot_id = ""
     for line in run_result["results"][0]["stdout"].splitlines():
         payload = json.loads(line)
@@ -89,3 +94,38 @@ def test_local_restic_snapshot_check_restore_records_state(tmp_path):
     repo_id = run_result["results"][0]["repo_id"]
     assert snapshot_id in state["repos"][repo_id]["successful_snapshot_ids"]
     assert state["repos"][repo_id]["last_successful_snapshot_id"] == snapshot_id
+
+
+def test_local_restic_retention_reconciles_purge_ledger(tmp_path):
+    if not shutil.which("restic"):
+        pytest.skip("restic executable is unavailable")
+    repo_path = tmp_path / "repos" / "repo-a"
+    _init_git_repo(repo_path)
+    cfg = Config(config_path=str(_write_local_restic_config(tmp_path)))
+    profile = cfg.snapshot_profiles["local-test"]
+
+    assert snapshot_init(profile)["ok"] is True
+    first_run = snapshot_run(profile)
+    second_run = snapshot_run(profile)
+    assert first_run["success"] is True
+    assert second_run["success"] is True
+
+    def snapshot_id(result):
+        for line in result["results"][0]["stdout"].splitlines():
+            payload = json.loads(line)
+            if payload.get("message_type") == "summary":
+                return payload["snapshot_id"]
+        raise AssertionError("restic run did not return a snapshot ID")
+
+    first_id = snapshot_id(first_run)
+    second_id = snapshot_id(second_run)
+    assert first_id != second_id
+    repo_id = second_run["results"][0]["repo_id"]
+    state = load_state(profile)
+    assert state["repos"][repo_id]["successful_snapshot_ids"] == [second_id]
+
+    retire_repo(profile, repo_id)
+    plan = purge_plan(profile, repo_id)
+    assert plan["snapshot_ids"] == [second_id]
+    assert plan["forget_args"][-2:] == ["--", second_id]
+    assert "--dry-run" in plan["forget_args"]
