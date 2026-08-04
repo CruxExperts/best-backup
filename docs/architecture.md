@@ -179,7 +179,7 @@ Public keys can be referenced by path, URL, or GitHub shortcut (`github:USER/gis
 
 ### `bbackup/management/`
 
-11-module subpackage powering the `bbman` command. Each module handles one lifecycle concern:
+13-module subpackage powering the `bbman` command. Each module handles one lifecycle concern:
 
 | Module | Responsibility |
 |---|---|
@@ -188,6 +188,7 @@ Public keys can be referenced by path, URL, or GitHub shortcut (`github:USER/gis
 | `health.py` | Docker, system tool, config health checks |
 | `diagnostics.py` | Generate diagnostic report |
 | `dependencies.py` | Check and install missing packages; `is_venv()` guard prevents pip from running on an externally-managed system Python (PEP 668) |
+| `gdrive_auth.py` | Google Desktop app OAuth helper that writes rclone Drive remotes without owning backup transfers |
 | `updater.py` | Self-update from remote repo |
 | `version.py` | Version detection, Git-compatible checksums |
 | `repo.py` | Manage update source URL |
@@ -235,6 +236,20 @@ For remotes with `type: rclone`, you can tune transfer concurrency so uploads us
 - **Per-remote:** Under the remote, set optional `rclone_options` with `transfers` (parallel file transfers) and `checkers` (parallel checkers for listing). Both are integers from 1 to 32; recommended defaults are 8 and 8.
 - **Global default:** Top-level `rclone.default_options` sets defaults for all rclone remotes; per-remote `rclone_options` overrides it.
 - **Omitted:** If neither is set, bbackup uses transfers=8 and checkers=8.
+
+### Google Drive rclone auth
+
+`bbman auth-gdrive` is a management helper for creating the rclone Drive remote
+that bbackup later uses. It lives in `bbackup/management/gdrive_auth.py`, uses
+the optional `gdrive-auth` dependency extra, and runs Google Desktop app
+loopback OAuth through `google-auth-oauthlib`.
+
+The helper validates an installed-app `client_secret.json`, requires a returned
+refresh token, converts credentials to rclone token JSON, and calls rclone RC
+`config/create` or `config/update` through a temporary Unix socket inside a
+mode-0700 directory. It does not hand-edit `rclone.conf`, does not implement
+native Google Drive uploads, and does not replace `bbackup/remote.py`; backup
+and listing operations continue to use rclone as an external transfer engine.
 
 ---
 

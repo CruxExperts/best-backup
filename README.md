@@ -176,6 +176,41 @@ remotes:
 
 For rclone remotes you can optionally set `rclone_options.transfers` and `rclone_options.checkers` (or top-level `rclone.default_options`) to tune upload concurrency; both accept 1–32, default 8. See [config.yaml.example](config.yaml.example) and [docs/architecture.md](docs/architecture.md#rclone-options).
 
+### Google Drive rclone auth
+
+Use `bbman auth-gdrive` to create a dedicated Google Drive rclone remote for
+bbackup. The helper uses a Google Desktop app OAuth client secrets file and
+configures rclone; backup uploads still run through rclone.
+
+```bash
+uv sync --extra gdrive-auth
+bbman auth-gdrive --client-secrets client_secret.json --dry-run --output json
+bbman auth-gdrive --client-secrets client_secret.json --remote bbackup-gdrive
+```
+
+For an SSH-hosted bbackup install, forward the fixed callback port from your
+workstation, run the command inside that SSH session, then open its printed URL
+in your workstation browser:
+
+```bash
+ssh -L 53682:127.0.0.1:53682 user@server
+bbman auth-gdrive --client-secrets client_secret.json --no-open-browser --port 53682
+```
+
+Do not pass a raw client secret value on the command line; use the downloaded
+`client_secret.json` file.
+
+Then reference the rclone remote in `config.yaml`:
+
+```yaml
+remotes:
+  gdrive:
+    enabled: true
+    type: rclone
+    remote_name: bbackup-gdrive
+    path: /backups/docker
+```
+
 ### Filesystem backup
 
 Add a `filesystem:` section to back up arbitrary host paths:
@@ -258,6 +293,9 @@ Escrow the password outside the backup.
 Google Drive rclone remotes should use a dedicated OAuth `client_id`. A profile
 may opt into rclone's shared default Drive client with
 `allow_default_rclone_drive_client: true`; quoted strings do not enable it.
+Create the dedicated remote with `bbman auth-gdrive --client-secrets
+client_secret.json --remote my-drive` before using a repository such as
+`rclone:my-drive:...`.
 
 Plan, initialize, run, check, restore, retire, purge-plan, and render schedule
 units with:
@@ -357,6 +395,7 @@ bbman check-updates                                  # Check for newer version
 bbman update                                         # Self-update from repo
 bbman update --yes                                   # Skip confirmation (agent mode)
 bbman repo-url --url URL                             # Set the update source URL
+bbman auth-gdrive --client-secrets client_secret.json # Configure Google Drive rclone auth
 bbman run backup --containers app                    # Run bbackup through the wrapper
 bbman skills                                         # Discover bbman capabilities
 bbman skills maintenance                             # Step-by-step maintenance guide

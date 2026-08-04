@@ -37,6 +37,7 @@ from bbackup.cli_utils import (
     BBACKUP_NO_INTERACTIVE_ENV,
 )
 from bbackup.skills import get_skill
+from bbackup.management import gdrive_auth as gdrive_auth_module
 
 
 SKILLS_DOC_RESOURCE = "cli-skills.md"
@@ -59,8 +60,6 @@ try:
         DEFAULT_REPO_URL = CANONICAL_REPO_URL
 except Exception:
     DEFAULT_REPO_URL = CANONICAL_REPO_URL
-
-sys.path.insert(0, str(Path(__file__).parent))
 
 console = Console()
 
@@ -85,12 +84,8 @@ def cli(ctx):
     except Exception:
         ctx.obj["repo_url"] = DEFAULT_REPO_URL
 
-    try:
-        from bbackup.management.first_run import is_first_run
-        if is_first_run():
-            console.print("[yellow]First run detected. Run 'bbman setup' to configure.[/yellow]")
-    except Exception:
-        pass
+    # Keep command stdout/stderr deterministic; users can run `bbman setup`
+    # explicitly and docs cover first-run setup.
 
 
 # ---------------------------------------------------------------------------
@@ -668,6 +663,131 @@ def repo_url(ctx, url, skills, output, input_json):
         render_output({}, output, "repo-url", success=False, errors=[str(e)])
         if output != "json":
             console.print(f"[red]Error: {e}[/red]")
+        sys.exit(EXIT_SYSTEM_ERROR)
+
+
+# ---------------------------------------------------------------------------
+# auth-gdrive
+# ---------------------------------------------------------------------------
+
+@cli.command("auth-gdrive")
+@click.option(
+    "--client-secrets",
+    "client_secrets",
+    type=click.Path(exists=False, dir_okay=False, path_type=str),
+    help="Path to a Google Desktop app OAuth client_secret.json file.",
+)
+@click.option("--remote", default="bbackup-gdrive", show_default=True, help="rclone remote name to create or update.")
+@click.option("--scope", default="drive", show_default=True, help="rclone Google Drive scope name.")
+@click.option("--port", default=53682, show_default=True, type=int, help="Loopback OAuth callback port.")
+@click.option("--timeout", default=300, show_default=True, type=int, help="OAuth local server timeout in seconds.")
+@click.option("--no-open-browser", is_flag=True, default=False, help="Print the auth URL instead of opening a browser.")
+@click.option("--dry-run", is_flag=True, default=False, help="Validate inputs and show the intended setup without OAuth or rclone writes.")
+@click.option("--force", is_flag=True, default=False, help="Update an existing rclone remote instead of failing.")
+@click.option(
+    "--skills",
+    is_flag=True,
+    help="Show skills documentation for this command and exit.",
+)
+@output_option
+@input_json_option
+@click.pass_context
+def auth_gdrive(ctx, client_secrets, remote, scope, port, timeout, no_open_browser, dry_run, force, skills, output, input_json):
+    """Authorize Google Drive and configure a dedicated rclone remote."""
+    if skills:
+        _print_command_skills("bbman", "auth-gdrive")
+    merge_json_input(ctx, input_json)
+
+    output = ctx.params.get("output")
+    if output not in ("text", "json"):
+        output_fmt = "json" if output == "json" else "text"
+        json_error("auth-gdrive", "output must be 'text' or 'json'.", EXIT_USER_ERROR, output_fmt)
+    client_secrets = ctx.params.get("client_secrets")
+    remote = ctx.params.get("remote")
+    scope = ctx.params.get("scope")
+    port = ctx.params.get("port")
+    timeout = ctx.params.get("timeout")
+    no_open_browser = ctx.params.get("no_open_browser")
+    dry_run = ctx.params.get("dry_run")
+    force = ctx.params.get("force")
+
+    bool_params = {
+        "no_open_browser": no_open_browser,
+        "dry_run": dry_run,
+        "force": force,
+    }
+    for name, value in bool_params.items():
+        if not isinstance(value, bool):
+            json_error("auth-gdrive", f"{name} must be a boolean.", EXIT_USER_ERROR, output)
+    if not isinstance(port, int) or isinstance(port, bool):
+        json_error("auth-gdrive", "port must be an integer.", EXIT_USER_ERROR, output)
+    if not isinstance(timeout, int) or isinstance(timeout, bool):
+        json_error("auth-gdrive", "timeout must be an integer.", EXIT_USER_ERROR, output)
+    if client_secrets is None or client_secrets == "":
+        json_error("auth-gdrive", "--client-secrets is required.", EXIT_USER_ERROR, output)
+    string_params = {
+        "client_secrets": client_secrets,
+        "remote": remote,
+        "scope": scope,
+    }
+    for name, value in string_params.items():
+        if not isinstance(value, str) or not value.strip():
+            json_error("auth-gdrive", f"{name} must be a non-empty string.", EXIT_USER_ERROR, output)
+    if port < 1 or port > 65535:
+        json_error("auth-gdrive", "--port must be between 1 and 65535.", EXIT_USER_ERROR, output)
+    if timeout < 1:
+        json_error("auth-gdrive", "--timeout must be greater than 0.", EXIT_USER_ERROR, output)
+    if no_open_browser and output == "json" and not dry_run:
+        json_error(
+            "auth-gdrive",
+            "--no-open-browser requires text output during OAuth; use --output text or omit --no-open-browser.",
+            EXIT_USER_ERROR,
+            output,
+        )
+    try:
+        result = gdrive_auth_module.auth_gdrive(
+            client_secrets=client_secrets,
+            remote=remote,
+            scope=scope,
+            port=port,
+            timeout=timeout,
+            open_browser=not no_open_browser,
+            suppress_oauth_prompt=(output == "json"),
+            dry_run=dry_run,
+            force=force,
+        )
+        render_output(result, output, "auth-gdrive", success=True)
+        if output != "json":
+            if dry_run:
+                console.print(f"[green]Dry run OK:[/green] would configure rclone remote [bold]{remote}[/bold].")
+            else:
+                action = result.get("rclone", {}).get("action", "configured")
+                console.print(f"[green]Google Drive remote {action}:[/green] [bold]{remote}[/bold]")
+            console.print("[dim]Use this remote in config.yaml as type: rclone with remote_name set to the same name.[/dim]")
+        sys.exit(EXIT_SUCCESS)
+    except gdrive_auth_module.OptionalDependencyMissing as e:
+        message = str(e)
+        render_output({}, output, "auth-gdrive", success=False, errors=[message])
+        if output != "json":
+            console.print(f"[yellow]{message}[/yellow]")
+        sys.exit(EXIT_USER_ERROR)
+    except gdrive_auth_module.RcloneError as e:
+        message = str(e)
+        render_output({}, output, "auth-gdrive", success=False, errors=[message])
+        if output != "json":
+            console.print(f"[red]{message}[/red]")
+        sys.exit(EXIT_SYSTEM_ERROR)
+    except gdrive_auth_module.GDriveAuthError as e:
+        message = str(e)
+        render_output({}, output, "auth-gdrive", success=False, errors=[message])
+        if output != "json":
+            console.print(f"[red]{message}[/red]")
+        sys.exit(EXIT_USER_ERROR)
+    except Exception as e:
+        message = gdrive_auth_module.redact(str(e))
+        render_output({}, output, "auth-gdrive", success=False, errors=[message])
+        if output != "json":
+            console.print(f"[red]Error configuring Google Drive remote: {message}[/red]")
         sys.exit(EXIT_SYSTEM_ERROR)
 
 

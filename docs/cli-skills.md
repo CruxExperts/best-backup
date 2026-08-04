@@ -646,6 +646,57 @@ Render matching service/timer units for daily snapshot runs, weekly non-destruct
 
 ## bbman
 
+### bbman auth-gdrive
+
+**Summary**: Authorize Google Drive and configure an rclone Drive remote.
+
+Run Google Desktop app loopback OAuth with the optional gdrive-auth extra, then create or update a dedicated rclone Drive remote. bbackup still uses rclone for transfers; this command only sets up OAuth and rclone config.
+
+#### CLI parameters
+
+| Name | Type | Required | Default | Description |
+|---|---|:---:|---|---|
+| `--client-secrets` | `path` | yes | `` | Path to a Google Desktop app OAuth client_secret.json file. |
+| `--remote` | `string` | no | `'bbackup-gdrive'` | rclone remote name to create or update. |
+| `--scope` | `string` | no | `'drive'` | rclone Google Drive scope name. |
+| `--port` | `int` | no | `53682` | Loopback OAuth callback port on 127.0.0.1. |
+| `--timeout` | `int` | no | `300` | OAuth local server timeout in seconds. |
+| `--no-open-browser` | `bool` | no | `False` | Print the auth URL instead of opening a browser. |
+| `--dry-run` | `bool` | no | `False` | Validate inputs and show the intended setup without OAuth or rclone writes. |
+| `--force` | `bool` | no | `False` | Update an existing rclone remote instead of failing. |
+| `--skills` | `bool` | no | `False` | Show skills documentation for this command and exit. |
+| `--output` | `string` | no | `` | Output format: text or json. |
+
+#### JSON / environment parameters
+
+| Name | Kind | Type | Required | Default | Description |
+|---|---|---|:---:|---|---|
+| `input_json` | json | `object` | no | `` | Flat JSON object providing all parameters. |
+
+#### Examples
+
+- Validate the desktop OAuth client and planned rclone remote without making changes.
+
+  ```bash
+  bbman auth-gdrive --client-secrets client_secret.json --dry-run --output json
+  ```
+
+  ```bash
+  bbman auth-gdrive --input-json '{"client_secrets":"client_secret.json","dry_run":true,"output":"json"}' --output json
+  ```
+
+- Authorize Google Drive and create the default bbackup rclone remote.
+
+  ```bash
+  bbman auth-gdrive --client-secrets client_secret.json
+  ```
+
+- Use the printed URL through an SSH local-port tunnel on port 53682.
+
+  ```bash
+  bbman auth-gdrive --client-secrets client_secret.json --no-open-browser --port 53682
+  ```
+
 ### bbman check-deps
 
 **Summary**: Check and optionally install missing dependencies.

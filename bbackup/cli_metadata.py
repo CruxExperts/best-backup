@@ -1708,6 +1708,139 @@ _register_bbman(
 _register_bbman(
     CliCommand(
         cli="bbman",
+        name="auth-gdrive",
+        summary="Authorize Google Drive and configure an rclone Drive remote.",
+        description=(
+            "Run Google Desktop app loopback OAuth with the optional gdrive-auth extra, "
+            "then create or update a dedicated rclone Drive remote. bbackup still uses "
+            "rclone for transfers; this command only sets up OAuth and rclone config."
+        ),
+        category="integration",
+        parameters=[
+            Parameter(
+                name="client_secrets",
+                kind="flag",
+                type="path",
+                description="Path to a Google Desktop app OAuth client_secret.json file.",
+                cli_flag="--client-secrets",
+                json_key="client_secrets",
+                required=True,
+            ),
+            Parameter(
+                name="remote",
+                kind="flag",
+                type="string",
+                description="rclone remote name to create or update.",
+                cli_flag="--remote",
+                json_key="remote",
+                default="bbackup-gdrive",
+            ),
+            Parameter(
+                name="scope",
+                kind="flag",
+                type="string",
+                description="rclone Google Drive scope name.",
+                cli_flag="--scope",
+                json_key="scope",
+                default="drive",
+            ),
+            Parameter(
+                name="port",
+                kind="flag",
+                type="int",
+                description="Loopback OAuth callback port on 127.0.0.1.",
+                cli_flag="--port",
+                json_key="port",
+                default=53682,
+            ),
+            Parameter(
+                name="timeout",
+                kind="flag",
+                type="int",
+                description="OAuth local server timeout in seconds.",
+                cli_flag="--timeout",
+                json_key="timeout",
+                default=300,
+            ),
+            Parameter(
+                name="no_open_browser",
+                kind="flag",
+                type="bool",
+                description="Print the auth URL instead of opening a browser.",
+                cli_flag="--no-open-browser",
+                json_key="no_open_browser",
+                default=False,
+            ),
+            Parameter(
+                name="dry_run",
+                kind="flag",
+                type="bool",
+                description="Validate inputs and show the intended setup without OAuth or rclone writes.",
+                cli_flag="--dry-run",
+                json_key="dry_run",
+                default=False,
+            ),
+            Parameter(
+                name="force",
+                kind="flag",
+                type="bool",
+                description="Update an existing rclone remote instead of failing.",
+                cli_flag="--force",
+                json_key="force",
+                default=False,
+            ),
+            Parameter(
+                name="skills",
+                kind="flag",
+                type="bool",
+                description="Show skills documentation for this command and exit.",
+                cli_flag="--skills",
+                default=False,
+            ),
+            Parameter(
+                name="output",
+                kind="flag",
+                type="string",
+                description="Output format: text or json.",
+                cli_flag="--output",
+                json_key="output",
+                allowed_values=["text", "json"],
+                shape="enum",
+            ),
+            Parameter(
+                name="input_json",
+                kind="json_field",
+                type="object",
+                description="Flat JSON object providing all parameters.",
+                shape="object",
+            ),
+        ],
+        examples=[
+            Example(
+                description="Validate the desktop OAuth client and planned rclone remote without making changes.",
+                cli="bbman auth-gdrive --client-secrets client_secret.json --dry-run --output json",
+                input_json={
+                    "client_secrets": "client_secret.json",
+                    "dry_run": True,
+                    "output": "json",
+                },
+            ),
+            Example(
+                description="Authorize Google Drive and create the default bbackup rclone remote.",
+                cli="bbman auth-gdrive --client-secrets client_secret.json",
+            ),
+            Example(
+                description="Use the printed URL through an SSH local-port tunnel on port 53682.",
+                cli="bbman auth-gdrive --client-secrets client_secret.json --no-open-browser --port 53682",
+            ),
+        ],
+    )
+)
+
+
+_register_bbman(
+    CliCommand(
+        cli="bbman",
         name="run",
         summary="Run bbackup commands through the bbman wrapper.",
         description="Launch the main bbackup CLI through bbman, preserving JSON envelope behavior when requested.",
