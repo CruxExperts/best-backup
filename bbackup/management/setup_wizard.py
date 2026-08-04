@@ -12,6 +12,7 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from .first_run import mark_first_run_complete, get_config_file
+from .dependencies import check_python_dependencies as _check_python_dependencies
 
 
 console = Console()
@@ -54,25 +55,9 @@ def check_system_tool(tool: str) -> Tuple[bool, str]:
 
 
 def check_python_packages() -> Tuple[bool, List[str]]:
-    """Check if required Python packages are installed."""
-    required = {
-        "rich": "rich",
-        "pyyaml": "yaml",
-        "docker": "docker",
-        "click": "click",
-        "paramiko": "paramiko",
-        "cryptography": "cryptography",
-        "requests": "requests",
-    }
-    missing = []
-    
-    for package, import_name in required.items():
-        try:
-            __import__(import_name)
-        except ImportError:
-            missing.append(package)
-    
-    return len(missing) == 0, missing
+    """Check required Python package imports and security version floors."""
+    all_ok, _, missing = _check_python_dependencies()
+    return all_ok, missing
 
 
 def run_setup_wizard() -> bool:

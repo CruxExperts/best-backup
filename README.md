@@ -267,7 +267,25 @@ snapshot_profiles:
     include_paths:
       - ~/.config/bbackup
       - ~/Documents
+    retention:
+      active_repo_daily: 14
+      active_repo_weekly: 8
+      active_repo_monthly: 12
+      path_daily: 14
+      path_weekly: 8
+      path_monthly: 12
+    schedule:
+      daily_time: "03:30"
+      maintenance_time: "Sun 04:30"
+      verification_time: "monthly"
+      verification_read_data_subset: "5%"
 ```
+`active_repo_*` retention is applied only to the matching active Git repo ID.
+`path_*` retention is applied only to matching configured include-path IDs.
+The generated `restic forget` command filters by `host_id` plus stable
+bbackup/profile/scope/ID tags and groups only by host. Mutable user tags are
+excluded, as are retired repositories and unscoped profile-wide policies.
+
 
 The password file must stay outside selected backup paths and should be `0600`.
 Escrow the password outside the backup.
@@ -295,11 +313,16 @@ bbackup snapshot run --profile essentials-daily
 ```
 
 Deleted Git repositories are marked retired only after at least one successful
-snapshot. Automated retention must target active repo IDs or configured path
-scopes; use `snapshot purge-plan` for dry-run-first retired-repo purges.
-Rendered schedule units include a daily `snapshot run`, weekly non-destructive
-`snapshot check`, and monthly `snapshot check --read-data-subset`, defaulting
-to `5%` unless `schedule.verification_read_data_subset` is set.
+snapshot. Retirement is sticky: rediscovering the same repository does not
+reactivate it automatically. Automated retention targets active repo IDs and
+configured path scopes. Retired cleanup remains manual: run `snapshot
+purge-plan`, execute its dry-run `restic forget` command, inspect the result,
+and only then run the destructive command after explicit operator confirmation.
+
+Rendered schedule units include a shared user-runtime `flock` lock, so daily
+backup, weekly non-destructive `snapshot check`, and monthly verification
+cannot overlap. Monthly verification defaults to `5%` unless
+`schedule.verification_read_data_subset` is set.
 
 ---
 
