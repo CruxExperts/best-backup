@@ -233,9 +233,15 @@ snapshot_profiles:
       - "**/node_modules"
       - "**/.venv"
     retention:
+      # Retention filters by host_id plus stable scope/ID tags and groups by host.
+      # Mutable user tags, retired IDs, and other hosts are never selected.
       active_repo_daily: 14
       active_repo_weekly: 8
       active_repo_monthly: 12
+      # Optional retention for include_paths (not Git repositories).
+      path_daily: 14
+      path_weekly: 8
+      path_monthly: 12
     schedule:
       daily_time: "03:30"
       maintenance_time: "Sun 04:30"

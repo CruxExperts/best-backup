@@ -14,7 +14,7 @@
 | Docker integration | docker-py SDK | 7.0.0+ |
 | Config format | PyYAML | 6.0.1+ |
 | SFTP | paramiko | 3.4.0+ |
-| Encryption | cryptography | 48.0.1+ |
+| Encryption | cryptography | 50.0.0+ |
 | HTTP (key fetching) | requests | 2.31.0+ |
 | Volume backup | rsync | system |
 | Cloud storage | rclone | optional |
@@ -93,6 +93,19 @@ All commands emit exactly one JSON object to **stdout** in JSON mode:
 ### `bbackup/config.py`
 
 Loads and validates the YAML config file. Discovers config location using the priority chain below. Contains all dataclasses: `BackupScope`, `BackupSet`, `RemoteStorage`, `RetentionPolicy`, `IncrementalSettings`, `EncryptionSettings`, `Config`. CLI overrides are merged on top of file defaults.
+
+### `bbackup/snapshot.py`
+
+Owns native restic snapshot profiles. It discovers Git repositories, reconciles
+stable repository IDs in the state ledger, builds tagged backup commands, and
+records successful snapshot IDs. Configured retention is emitted as a separate
+`restic forget` command per active repository or include-path. It filters by the
+configured host plus stable bbackup/profile/scope/ID tags and groups only by
+host, so mutable user tags cannot split retention policy. Retired repositories
+are never selected automatically.
+Retired cleanup uses `purge-plan` with exact state-ledger snapshot IDs and
+remains dry-run-first.
+Generated systemd services share a user-runtime `flock` lock.
 
 ### `bbackup/docker_backup.py`
 

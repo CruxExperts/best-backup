@@ -412,6 +412,26 @@ class TestDependencies:
         assert isinstance(installed, list)
         assert isinstance(missing, list)
 
+    def test_check_python_dependencies_rejects_old_cryptography(self):
+        from bbackup.management.dependencies import check_python_dependencies
+
+        with patch(
+            "bbackup.management.dependencies.package_version",
+            return_value="49.0.0",
+        ):
+            ok, installed, missing = check_python_dependencies()
+
+        assert ok is False
+        assert "cryptography>=50.0.0" in missing
+        assert "cryptography" not in installed
+
+    def test_release_tuple_accepts_stable_post_and_local_versions(self):
+        from bbackup.management.dependencies import _release_tuple
+
+        assert _release_tuple("50.0.0.post1+vendor") == (50, 0, 0)
+        assert _release_tuple("50.0.0+vendor") == (50, 0, 0)
+        assert _release_tuple("50.0.0rc1") is None
+
     def test_check_project_dependencies_reads_packages(self):
         from bbackup.management.dependencies import check_project_dependencies
         result = check_project_dependencies()

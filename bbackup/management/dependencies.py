@@ -2,18 +2,43 @@
 Dependency checking and installation.
 """
 
+import re
 import subprocess
 import sys
-import re
 import tomllib
+from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from rich.console import Console
 from rich.table import Table
 from rich.prompt import Confirm
 
 console = Console()
+
+REQUIRED_PYTHON_PACKAGES = {
+    "rich": "rich",
+    "pyyaml": "yaml",
+    "docker": "docker",
+    "click": "click",
+    "paramiko": "paramiko",
+    "cryptography": "cryptography",
+    "requests": "requests",
+}
+MINIMUM_PYTHON_PACKAGE_VERSIONS = {
+    "cryptography": (50, 0, 0),
+}
+
+
+def _release_tuple(raw_version: str) -> Optional[Tuple[int, int, int]]:
+    """Return a stable three-part release tuple, rejecting prereleases."""
+    match = re.fullmatch(
+        r"(\d+)\.(\d+)\.(\d+)(?:\.post\d+)?(?:\+[A-Za-z0-9.-]+)?",
+        raw_version,
+    )
+    if match is None:
+        return None
+    return tuple(int(part) for part in match.groups())
 
 
 def check_system_dependencies() -> Dict[str, Tuple[bool, str]]:
@@ -63,32 +88,30 @@ def check_system_dependencies() -> Dict[str, Tuple[bool, str]]:
 
 
 def check_python_dependencies() -> Tuple[bool, List[str], List[str]]:
-    """
-    Check Python package dependencies.
-    
-    Returns:
-        Tuple of (all_installed, installed_packages, missing_packages)
-    """
-    required = {
-        "rich": "rich",
-        "pyyaml": "yaml",
-        "docker": "docker",
-        "click": "click",
-        "paramiko": "paramiko",
-        "cryptography": "cryptography",
-        "requests": "requests",
-    }
-    
+    """Check required Python package imports and security version floors."""
     installed = []
     missing = []
-    
-    for package_name, import_name in required.items():
+
+    for package_name, import_name in REQUIRED_PYTHON_PACKAGES.items():
         try:
             __import__(import_name)
-            installed.append(package_name)
         except ImportError:
             missing.append(package_name)
-    
+            continue
+
+        minimum = MINIMUM_PYTHON_PACKAGE_VERSIONS.get(package_name)
+        if minimum is not None:
+            try:
+                current = _release_tuple(package_version(package_name))
+            except PackageNotFoundError:
+                current = None
+            if current is None or current < minimum:
+                floor = ".".join(str(part) for part in minimum)
+                missing.append(f"{package_name}>={floor}")
+                continue
+
+        installed.append(package_name)
+
     return len(missing) == 0, installed, missing
 
 

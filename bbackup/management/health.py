@@ -13,6 +13,7 @@ from rich.table import Table
 
 from ..config import Config
 from ..snapshot import check_all_snapshot_profiles
+from .dependencies import check_python_dependencies as _check_python_dependencies
 
 console = Console()
 
@@ -71,28 +72,8 @@ def check_system_tool(tool: str) -> Tuple[bool, str]:
 
 
 def check_python_packages() -> Tuple[bool, List[str], List[str]]:
-    """Check if required Python packages are installed."""
-    required = {
-        "rich": "rich",
-        "pyyaml": "yaml",
-        "docker": "docker",
-        "click": "click",
-        "paramiko": "paramiko",
-        "cryptography": "cryptography",
-        "requests": "requests",
-    }
-    
-    installed = []
-    missing = []
-    
-    for package_name, import_name in required.items():
-        try:
-            __import__(import_name)
-            installed.append(package_name)
-        except ImportError:
-            missing.append(package_name)
-    
-    return len(missing) == 0, installed, missing
+    """Check required Python package imports and security version floors."""
+    return _check_python_dependencies()
 
 
 def check_config_file() -> Tuple[bool, str]:

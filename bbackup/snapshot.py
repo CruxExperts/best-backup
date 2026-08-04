@@ -159,6 +159,10 @@ def _is_excluded_path(path: Path, exclude_paths: Iterable[str]) -> bool:
     return False
 
 
+def _has_snapshot_history(entry: Dict[str, Any]) -> bool:
+    return bool(entry.get("successful_snapshot_ids")) or entry.get("ever_successful_snapshot") is True
+
+
 def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo], save: bool = True) -> Dict[str, Any]:
     state = load_state(profile)
     repos = state.setdefault("repos", {})
@@ -198,20 +202,21 @@ def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo], 
             })
             continue
 
-        active_ids_for_path = [
+        matching_ids_for_path = [
             existing_id
             for existing_id, data in repos.items()
-            if data.get("path") == repo.path and data.get("status") == "active"
-            and (
-                existing_id == repo.repo_id
-                or existing_id == repo.legacy_repo_id
-                or data.get("fingerprint") in {repo.fingerprint, repo.legacy_fingerprint}
-            )
+            if data.get("path") == repo.path
+            and data.get("status") in {"active", "retired"}
+            and data.get("fingerprint") in {repo.fingerprint, repo.legacy_fingerprint}
         ]
-        if active_ids_for_path:
+        preserve_retired = any(
+            repos[existing_id].get("status") == "retired"
+            for existing_id in matching_ids_for_path
+        )
+        if matching_ids_for_path:
             merged_entry: Dict[str, Any] = {}
             merged_success_ids: List[str] = []
-            for existing_id in active_ids_for_path:
+            for existing_id in matching_ids_for_path:
                 existing_entry = repos.pop(existing_id)
                 merged_entry.update(existing_entry)
                 for snapshot_id in existing_entry.get("successful_snapshot_ids", []) or []:
@@ -219,6 +224,7 @@ def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo], 
                         merged_success_ids.append(snapshot_id)
             if repo.repo_id in repos:
                 current_entry = repos.pop(repo.repo_id)
+                preserve_retired = preserve_retired or current_entry.get("status") == "retired"
                 merged_entry.update(current_entry)
                 for snapshot_id in current_entry.get("successful_snapshot_ids", []) or []:
                     if snapshot_id not in merged_success_ids:
@@ -228,24 +234,24 @@ def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo], 
             repos[repo.repo_id] = merged_entry
         repo_id = repo.repo_id
         entry = repos.setdefault(repo_id, {})
+        status = "retired" if preserve_retired or entry.get("status") == "retired" else "active"
         entry.update({
             "repo_id": repo_id,
             "path": repo.path,
             "fingerprint": repo.fingerprint,
             "origin": repo.origin,
             "head": repo.head,
-            "status": "active",
+            "status": status,
             "last_seen_at": now,
         })
         entry.setdefault("first_seen_at", now)
         entry.setdefault("successful_snapshot_ids", [])
-
     for repo_id, entry in repos.items():
         if entry.get("status") != "active":
             continue
         if entry.get("path") in discovered_by_path:
             continue
-        if entry.get("successful_snapshot_ids"):
+        if _has_snapshot_history(entry):
             entry["status"] = "retired"
             entry["retired_at"] = now
         else:
@@ -326,12 +332,47 @@ class ResticRunner:
             args.extend(["--include", include])
         return args
 
-    def forget_args(self, tags: Iterable[str], dry_run: bool = True) -> List[str]:
+    def forget_args(self, snapshot_ids: Iterable[str], dry_run: bool = True) -> List[str]:
+        ids = list(snapshot_ids)
+        if not ids:
+            raise SnapshotError("Refusing to build a forget command without snapshot IDs")
         args = [*self.base_args(), "forget"]
         if dry_run:
             args.append("--dry-run")
-        for tag in tags:
-            args.extend(["--tag", tag])
+        return [*args, "--", *ids]
+
+    def retention_args(
+        self,
+        tags: Iterable[str],
+        policy: Dict[str, int],
+        host: str,
+        dry_run: bool = True,
+    ) -> List[str]:
+        tag_values = list(tags)
+        if not tag_values:
+            raise SnapshotError("Refusing to build a retention command without tags")
+        if not host:
+            raise SnapshotError("Refusing to build a retention command without a host")
+        if not policy:
+            raise SnapshotError("Refusing to build a retention command without a policy")
+        selected_periods = [period for period in ("daily", "weekly", "monthly") if period in policy]
+        if not selected_periods:
+            raise SnapshotError("Refusing to build a retention command without a supported policy")
+        args = [*self.base_args(), "forget"]
+        if dry_run:
+            args.append("--dry-run")
+        args.extend(
+            [
+                "--host",
+                host,
+                "--tag",
+                ",".join(tag_values),
+                "--group-by",
+                "host",
+            ]
+        )
+        for period in selected_periods:
+            args.extend([f"--keep-{period}", str(policy[period])])
         return args
 
     def run(self, args: List[str]) -> Dict[str, Any]:
@@ -367,29 +408,126 @@ def _restic_exclude_arg(pattern: str) -> str:
     return pattern
 
 
-def _snapshot_plan(profile: SnapshotProfile, save: bool) -> Dict[str, Any]:
+def _retention_policy(profile: SnapshotProfile, scope: str) -> Optional[Dict[str, int]]:
+    """Resolve a scoped restic retention policy from profile configuration."""
+    retention = profile.retention or {}
+    if not isinstance(retention, dict):
+        raise SnapshotError("Snapshot retention must be a mapping")
+
+    nested = retention.get(scope)
+    if scope == "repo" and nested is None:
+        nested = retention.get("active_repo")
+    if nested is not None and not isinstance(nested, dict):
+        raise SnapshotError(f"Snapshot retention.{scope} must be a mapping")
+
+    prefixes = {
+        "repo": ("active_repo", "repo"),
+        "path": ("path", "include_path"),
+    }.get(scope)
+    if prefixes is None:
+        raise SnapshotError(f"Unsupported snapshot retention scope: {scope}")
+
+    scoped_keys_present = any(
+        isinstance(key, str) and any(key.startswith(f"{prefix}_") for prefix in prefixes)
+        for key in retention
+    ) or isinstance(nested, dict)
+    policy: Dict[str, int] = {}
+    for period in ("daily", "weekly", "monthly"):
+        raw_value = nested.get(period) if isinstance(nested, dict) else None
+        if raw_value is None:
+            for prefix in prefixes:
+                raw_value = retention.get(f"{prefix}_{period}")
+                if raw_value is not None:
+                    break
+        if raw_value is None and not scoped_keys_present:
+            raw_value = retention.get(period)
+        if raw_value is None:
+            continue
+        if isinstance(raw_value, bool) or (
+            isinstance(raw_value, float) and not raw_value.is_integer()
+        ):
+            raise SnapshotError(f"Snapshot retention {scope}_{period} must be a non-negative integer")
+        try:
+            value = int(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise SnapshotError(
+                f"Snapshot retention {scope}_{period} must be a non-negative integer"
+            ) from exc
+        if value < 0:
+            raise SnapshotError(f"Snapshot retention {scope}_{period} must be a non-negative integer")
+        policy[period] = value
+    return policy or None
+
+
+def _retention_tags(profile: SnapshotProfile, scope: str, identifier: str) -> List[str]:
+    return [
+        "bbackup",
+        f"profile={profile.name}",
+        f"scope={scope}",
+        f"{scope}_id={identifier}",
+    ]
+
+
+def _retention_command(
+    profile: SnapshotProfile,
+    runner: ResticRunner,
+    scope: str,
+    identifier: str,
+    dry_run: bool,
+) -> Optional[Dict[str, Any]]:
+    policy = _retention_policy(profile, scope)
+    if not policy:
+        return None
+    tags = _retention_tags(profile, scope, identifier)
+    return {
+        "scope": scope,
+        "identifier": identifier,
+        "host": profile.host_id,
+        "policy": policy,
+        "tags": tags,
+        "args": runner.retention_args(tags, policy, profile.host_id, dry_run=dry_run),
+    }
+
+
+def _snapshot_plan(profile: SnapshotProfile, save: bool, dry_run: bool) -> Dict[str, Any]:
     discovered = discover_git_repos(profile)
     reconcile = reconcile_repos(profile, discovered, save=save)
     runner = ResticRunner(profile)
-    repo_commands = [
-        {
+    active_repo_ids = set(reconcile["active_repo_ids"])
+    repo_commands: List[Dict[str, Any]] = []
+    include_commands: List[Dict[str, Any]] = []
+    retention_commands: List[Dict[str, Any]] = []
+
+    for repo in discovered:
+        if repo.repo_id not in active_repo_ids:
+            continue
+        tags = common_tags(profile, "repo", [f"repo_id={repo.repo_id}"])
+        command: Dict[str, Any] = {
             "repo_id": repo.repo_id,
             "path": repo.path,
-            "args": runner.backup_args(
-                repo.path,
-                common_tags(profile, "repo", [f"repo_id={repo.repo_id}"]),
-            ),
+            "args": runner.backup_args(repo.path, tags),
         }
-        for repo in discovered
-        if repo.repo_id in set(reconcile["active_repo_ids"])
-    ]
-    include_commands = [
-        {
-            "path": str(expand_path(path)),
-            "args": runner.backup_args(path, common_tags(profile, "path", [f"path_id={path_id(path)}"])),
+        retention = _retention_command(profile, runner, "repo", repo.repo_id, dry_run=dry_run)
+        if retention:
+            command["retention_args"] = retention["args"]
+            retention_commands.append(retention)
+        repo_commands.append(command)
+
+    for path in profile.include_paths:
+        resolved_path = str(expand_path(path))
+        identifier = path_id(path)
+        tags = common_tags(profile, "path", [f"path_id={identifier}"])
+        command = {
+            "path": resolved_path,
+            "path_id": identifier,
+            "args": runner.backup_args(path, tags),
         }
-        for path in profile.include_paths
-    ]
+        retention = _retention_command(profile, runner, "path", identifier, dry_run=dry_run)
+        if retention:
+            command["retention_args"] = retention["args"]
+            retention_commands.append(retention)
+        include_commands.append(command)
+
     return {
         "profile": profile.name,
         "repository": profile.repository,
@@ -397,12 +535,13 @@ def _snapshot_plan(profile: SnapshotProfile, save: bool) -> Dict[str, Any]:
         "state_file": reconcile["state_file"],
         "repos": repo_commands,
         "paths": include_commands,
+        "retention": retention_commands,
         "alerts": reconcile["alerts"],
     }
 
 
 def snapshot_plan(profile: SnapshotProfile) -> Dict[str, Any]:
-    return _snapshot_plan(profile, save=False)
+    return _snapshot_plan(profile, save=False, dry_run=True)
 
 
 def path_id(path: str) -> str:
@@ -415,6 +554,7 @@ def mark_snapshot_success(profile: SnapshotProfile, repo_id: str, snapshot_id: s
     snapshots = entry.setdefault("successful_snapshot_ids", [])
     if snapshot_id and snapshot_id not in snapshots:
         snapshots.append(snapshot_id)
+    entry["ever_successful_snapshot"] = True
     entry["last_successful_snapshot_id"] = snapshot_id
     entry["last_successful_snapshot_at"] = utc_now()
     save_state(profile, state)
@@ -435,7 +575,7 @@ def snapshot_init(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, 
 def snapshot_run(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, Any]:
     if not dry_run:
         _require_snapshot_operation_preflight(profile)
-    plan = _snapshot_plan(profile, save=not dry_run)
+    plan = _snapshot_plan(profile, save=not dry_run, dry_run=dry_run)
     has_targets = bool(plan["repos"] or plan["paths"])
     if dry_run:
         plan["success"] = not bool(plan["alerts"]) and has_targets
@@ -446,7 +586,8 @@ def snapshot_run(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, A
     if not has_targets:
         raise SnapshotError("Refusing to run snapshot profile with no repositories or paths")
     runner = ResticRunner(profile)
-    results = []
+    results: List[Dict[str, Any]] = []
+    retention_results: List[Dict[str, Any]] = []
     for item in [*plan["repos"], *plan["paths"]]:
         result = runner.run(item["args"])
         result["target"] = item.get("path")
@@ -456,7 +597,20 @@ def snapshot_run(profile: SnapshotProfile, dry_run: bool = False) -> Dict[str, A
             snapshot_id = _extract_snapshot_id(result["stdout"])
             if snapshot_id:
                 mark_snapshot_success(profile, item["repo_id"], snapshot_id)
-    return {"profile": profile.name, "results": results, "success": all(r["ok"] for r in results)}
+        if result["ok"] and item.get("retention_args"):
+            retention_result = runner.run(item["retention_args"])
+            retention_result["target"] = item.get("path")
+            retention_result["repo_id"] = item.get("repo_id")
+            retention_results.append(retention_result)
+            if retention_result["ok"] and item.get("repo_id"):
+                _reconcile_retention_state(profile, item["repo_id"], retention_result["stdout"])
+    all_results = [*results, *retention_results]
+    return {
+        "profile": profile.name,
+        "results": results,
+        "retention_results": retention_results,
+        "success": all(result["ok"] for result in all_results),
+    }
 
 
 def _extract_snapshot_id(stdout: str) -> str:
@@ -468,6 +622,59 @@ def _extract_snapshot_id(stdout: str) -> str:
         if isinstance(obj, dict) and obj.get("message_type") == "summary":
             return obj.get("snapshot_id", "")
     return ""
+
+
+def _retention_removed_snapshot_ids(stdout: str) -> List[str]:
+    """Extract snapshot IDs removed by a JSON restic forget response."""
+    payloads: List[Any] = []
+    try:
+        payloads.append(json.loads(stdout))
+    except json.JSONDecodeError:
+        payloads.extend(
+            json.loads(line)
+            for line in stdout.splitlines()
+            if line.strip()
+            and _is_json_value(line)
+        )
+    removed: List[str] = []
+    for payload in payloads:
+        groups = payload if isinstance(payload, list) else [payload]
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            for snapshot in group.get("remove", []) or []:
+                snapshot_id = snapshot.get("id") if isinstance(snapshot, dict) else None
+                if snapshot_id and snapshot_id not in removed:
+                    removed.append(snapshot_id)
+    return removed
+
+
+def _is_json_value(value: str) -> bool:
+    try:
+        json.loads(value)
+    except json.JSONDecodeError:
+        return False
+    return True
+
+
+def _reconcile_retention_state(profile: SnapshotProfile, repo_id: str, stdout: str) -> None:
+    removed_ids = set(_retention_removed_snapshot_ids(stdout))
+    if not removed_ids:
+        return
+    state = load_state(profile)
+    entry = state.get("repos", {}).get(repo_id)
+    if not entry:
+        return
+    snapshots = [
+        snapshot_id
+        for snapshot_id in entry.get("successful_snapshot_ids", []) or []
+        if snapshot_id not in removed_ids
+    ]
+    entry["successful_snapshot_ids"] = snapshots
+    if entry.get("last_successful_snapshot_id") in removed_ids:
+        entry["last_successful_snapshot_id"] = snapshots[-1] if snapshots else ""
+        entry.pop("last_successful_snapshot_at", None)
+    save_state(profile, state)
 
 
 def snapshot_check(profile: SnapshotProfile, read_data_subset: Optional[str] = None, dry_run: bool = False) -> Dict[str, Any]:
@@ -499,7 +706,7 @@ def retire_repo(profile: SnapshotProfile, repo_id: str) -> Dict[str, Any]:
     entry = state.get("repos", {}).get(repo_id)
     if not entry:
         raise SnapshotError(f"Unknown repo_id: {repo_id}")
-    if not entry.get("successful_snapshot_ids"):
+    if not _has_snapshot_history(entry):
         raise SnapshotError(f"Cannot retire repo without a successful snapshot: {repo_id}")
     entry["status"] = "retired"
     entry["retired_at"] = utc_now()
@@ -514,15 +721,19 @@ def purge_plan(profile: SnapshotProfile, repo_id: str) -> Dict[str, Any]:
         raise SnapshotError(f"Unknown repo_id: {repo_id}")
     if entry.get("status") == "active":
         raise SnapshotError(f"Refusing to purge active repo_id: {repo_id}")
+    snapshot_ids = list(dict.fromkeys(entry.get("successful_snapshot_ids", [])))
+    if not snapshot_ids:
+        raise SnapshotError(f"Cannot purge repo without recorded snapshot IDs: {repo_id}")
     runner = ResticRunner(profile)
-    tags = common_tags(profile, "repo", [f"repo_id={repo_id}"])
     return {
         "repo_id": repo_id,
         "status": entry.get("status"),
         "path": entry.get("path"),
+        "snapshot_ids": snapshot_ids,
+        "selection": "exact_snapshot_ids",
         "dry_run_required": True,
-        "forget_args": runner.forget_args(tags, dry_run=True),
-        "destructive_args_after_confirmation": runner.forget_args(tags, dry_run=False),
+        "forget_args": runner.forget_args(snapshot_ids, dry_run=True),
+        "destructive_args_after_confirmation": runner.forget_args(snapshot_ids, dry_run=False),
     }
 
 
@@ -534,26 +745,28 @@ def schedule_units(profile: SnapshotProfile, config_path: Optional[str] = None) 
     verification_time = schedule.get("verification_time", "monthly")
     verification_read_data_subset = _systemd_exec_arg(str(schedule.get("verification_read_data_subset", "5%")))
     config_args = f" --config {shlex.quote(config_path)}" if config_path else ""
+    lock_path = f"%t/{service_name}.lock"
+    exec_prefix = f"/usr/bin/flock --exclusive {shlex.quote(lock_path)} /usr/bin/env bbackup{config_args}"
     unit = f"""[Unit]
 Description=bbackup {profile.host_id} {profile.name} snapshot
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/env bbackup{config_args} snapshot run --profile {shlex.quote(profile.name)}
+ExecStart={exec_prefix} snapshot run --profile {shlex.quote(profile.name)}
 """
     maintenance_service = f"""[Unit]
 Description=bbackup {profile.host_id} {profile.name} weekly maintenance
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/env bbackup{config_args} snapshot check --profile {shlex.quote(profile.name)}
+ExecStart={exec_prefix} snapshot check --profile {shlex.quote(profile.name)}
 """
     verification_service = f"""[Unit]
 Description=bbackup {profile.host_id} {profile.name} monthly verification
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/env bbackup{config_args} snapshot check --profile {shlex.quote(profile.name)} --read-data-subset {shlex.quote(verification_read_data_subset)}
+ExecStart={exec_prefix} snapshot check --profile {shlex.quote(profile.name)} --read-data-subset {shlex.quote(verification_read_data_subset)}
 """
     timer = f"""[Unit]
 Description=Run bbackup {profile.host_id} {profile.name} snapshot daily
