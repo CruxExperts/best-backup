@@ -181,6 +181,8 @@ For rclone remotes you can optionally set `rclone_options.transfers` and `rclone
 Use `bbman auth-gdrive` to create a dedicated Google Drive rclone remote for
 bbackup. The helper uses a Google Desktop app OAuth client secrets file and
 configures rclone; backup uploads still run through rclone.
+The helper targets My Drive by default; shared-drive selection is not exposed
+by this command.
 
 ```bash
 uv sync --extra gdrive-auth
