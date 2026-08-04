@@ -25,6 +25,23 @@ jobs:
       - name: Install uv
         run: python -m pip install uv
 
+
+      - name: Install pinned restic
+        env:
+          RESTIC_VERSION: "0.19.1"
+          RESTIC_SHA256: "f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c"
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/restic_${RESTIC_VERSION}_linux_amd64.bz2"
+          binary="$RUNNER_TEMP/restic"
+          curl --fail --location --retry 3 \
+            --output "$archive" \
+            "https://github.com/restic/restic/releases/download/v${RESTIC_VERSION}/restic_${RESTIC_VERSION}_linux_amd64.bz2"
+          echo "${RESTIC_SHA256}  ${archive}" | sha256sum --check -
+          bunzip2 --stdout "$archive" > "$binary"
+          chmod 0755 "$binary"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          "$binary" version
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
