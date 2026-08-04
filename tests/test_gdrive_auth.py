@@ -40,6 +40,9 @@ def fake_credentials(*, refresh_token="refresh-secret"):
 def test_missing_optional_dependency_returns_install_hint(tmp_path):
     secrets = write_client_secrets(tmp_path)
     with patch(
+        "bbackup.management.gdrive_auth._preflight_rclone_config",
+        return_value="create",
+    ), patch(
         "bbackup.management.gdrive_auth._load_installed_app_flow",
         side_effect=gdrive_auth.OptionalDependencyMissing(gdrive_auth.INSTALL_HINT),
     ):
@@ -172,6 +175,9 @@ def test_redaction_removes_tokens_and_client_secret():
 def test_oauth_exception_redacts_client_secret(tmp_path):
     secrets = write_client_secrets(tmp_path)
     with patch(
+        "bbackup.management.gdrive_auth._preflight_rclone_config",
+        return_value="create",
+    ), patch(
         "bbackup.management.gdrive_auth.run_oauth_flow",
         side_effect=RuntimeError("oauth failed for super-secret"),
     ):
