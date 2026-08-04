@@ -107,17 +107,37 @@ def test_restic_retention_args_use_one_conjunctive_scope_selector(tmp_path):
     args = ResticRunner(profile).retention_args(
         ["bbackup", "profile=essentials-daily", "scope=repo", "repo_id=abc123"],
         {"daily": 14, "weekly": 8, "monthly": 12},
+        host="test-host",
         dry_run=True,
     )
 
     tag_index = args.index("--tag")
     assert args[tag_index + 1] == "bbackup,profile=essentials-daily,scope=repo,repo_id=abc123"
     assert args.count("--tag") == 1
-    assert "--group-by" in args
+    assert args[args.index("--host") + 1] == "test-host"
+    assert args[args.index("--group-by") + 1] == "host"
     assert "--keep-daily" in args
     assert "--keep-weekly" in args
     assert "--keep-monthly" in args
     assert "--dry-run" in args
+
+
+def test_retention_selector_ignores_mutable_profile_tags(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    profile.retention = {"active_repo_daily": 14}
+    repo_path = tmp_path / "repos" / "repo-a"
+    init_git_repo(repo_path)
+
+    profile.tags = ["owner=before"]
+    before = snapshot_plan(profile)["retention"][0]
+    profile.tags = ["owner=after"]
+    after = snapshot_plan(profile)["retention"][0]
+
+    assert before["tags"] == after["tags"]
+    assert "owner=before" not in before["args"]
+    assert "owner=after" not in after["args"]
+    assert before["args"][before["args"].index("--host") + 1] == "test-host"
 
 
 def test_snapshot_retention_rejects_fractional_counts(tmp_path):
@@ -298,6 +318,31 @@ def test_path_reuse_with_different_fingerprint_alerts(tmp_path):
     result = reconcile_repos(profile, discovered)
     assert result["alerts"][0]["code"] == "path_reuse_conflict"
 
+
+
+def test_reconcile_keeps_discovered_retired_repo_out_of_active_retention(tmp_path):
+    cfg = Config(config_path=str(write_snapshot_config(tmp_path)))
+    profile = cfg.snapshot_profiles["essentials-daily"]
+    profile.include_paths = []
+    profile.retention = {"active_repo_daily": 14}
+    repo_path = tmp_path / "repos" / "repo-a"
+    init_git_repo(repo_path)
+    discovered = discover_git_repos(profile)
+    first = reconcile_repos(profile, discovered)
+    repo_id = first["active_repo_ids"][0]
+    state = load_state(profile)
+    state["repos"][repo_id]["successful_snapshot_ids"] = ["snapshot-1"]
+    save_state(profile, state)
+    retire_repo(profile, repo_id)
+
+    reconciled = reconcile_repos(profile, discovered)
+    plan = snapshot_plan(profile)
+
+    assert repo_id not in reconciled["active_repo_ids"]
+    assert repo_id in reconciled["retired_repo_ids"]
+    assert load_state(profile)["repos"][repo_id]["status"] == "retired"
+    assert plan["repos"] == []
+    assert plan["retention"] == []
 
 def test_no_origin_retired_path_reuse_alerts_after_reinit(tmp_path):
     cfg = Config(config_path=str(write_snapshot_config(tmp_path)))

@@ -247,8 +247,9 @@ snapshot_profiles:
 ```
 `active_repo_*` retention is applied only to the matching active Git repo ID.
 `path_*` retention is applied only to matching configured include-path IDs.
-The generated `restic forget` command uses one conjunctive tag selector and
-never includes retired repositories or an unscoped profile-wide policy.
+The generated `restic forget` command filters by `host_id` plus stable
+bbackup/profile/scope/ID tags and groups only by host. Mutable user tags are
+excluded, as are retired repositories and unscoped profile-wide policies.
 
 
 The password file must stay outside selected backup paths and should be `0600`.
@@ -274,10 +275,11 @@ bbackup snapshot run --profile essentials-daily
 ```
 
 Deleted Git repositories are marked retired only after at least one successful
-snapshot. Automated retention targets active repo IDs and configured path
-scopes. Retired cleanup remains manual: run `snapshot purge-plan`, execute its
-dry-run `restic forget` command, inspect the result, and only then run the
-destructive command after explicit operator confirmation.
+snapshot. Retirement is sticky: rediscovering the same repository does not
+reactivate it automatically. Automated retention targets active repo IDs and
+configured path scopes. Retired cleanup remains manual: run `snapshot
+purge-plan`, execute its dry-run `restic forget` command, inspect the result,
+and only then run the destructive command after explicit operator confirmation.
 
 Rendered schedule units include a shared user-runtime `flock` lock, so daily
 backup, weekly non-destructive `snapshot check`, and monthly verification

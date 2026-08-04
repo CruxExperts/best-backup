@@ -1,3 +1,4 @@
+from dataclasses import replace
 import json
 import shutil
 import socket
@@ -8,6 +9,8 @@ import pytest
 
 from bbackup.config import Config
 from bbackup.snapshot import (
+    ResticRunner,
+    common_tags,
     load_state,
     purge_plan,
     retire_repo,
@@ -129,3 +132,60 @@ def test_local_restic_retention_reconciles_purge_ledger(tmp_path):
     assert plan["snapshot_ids"] == [second_id]
     assert plan["forget_args"][-2:] == ["--", second_id]
     assert "--dry-run" in plan["forget_args"]
+
+
+
+def test_local_restic_retention_cannot_remove_other_host_snapshots(tmp_path):
+    if not shutil.which("restic"):
+        pytest.skip("restic executable is unavailable")
+
+    source = tmp_path / "shared-source"
+    source.mkdir()
+    (source / "data.txt").write_text("host isolation\n", encoding="utf-8")
+    cfg = Config(config_path=str(_write_local_restic_config(tmp_path)))
+    base_profile = cfg.snapshot_profiles["local-test"]
+    host_a = replace(base_profile, host_id="host-a")
+    host_b = replace(base_profile, host_id="host-b")
+
+    assert snapshot_init(base_profile)["ok"] is True
+    tags = common_tags(base_profile, "path", ["path_id=shared"])
+    runner_b = ResticRunner(host_b)
+    runner_a = ResticRunner(host_a)
+    assert runner_b.run(runner_b.backup_args(str(source), tags))["ok"] is True
+    assert runner_a.run(runner_a.backup_args(str(source), tags))["ok"] is True
+
+    retention = runner_a.run(
+        runner_a.retention_args(tags, {"daily": 1}, host="host-a", dry_run=False)
+    )
+    assert retention["ok"] is True, retention
+
+    snapshots = runner_a.run(runner_a.snapshots_args(tags))
+    assert snapshots["ok"] is True, snapshots
+    hosts = {item["hostname"] for item in json.loads(snapshots["stdout"])}
+    assert hosts == {"host-a", "host-b"}
+
+
+def test_local_restic_retention_spans_mutable_tag_changes(tmp_path):
+    if not shutil.which("restic"):
+        pytest.skip("restic executable is unavailable")
+
+    source = tmp_path / "shared-source"
+    source.mkdir()
+    (source / "data.txt").write_text("mutable tags\n", encoding="utf-8")
+    cfg = Config(config_path=str(_write_local_restic_config(tmp_path)))
+    profile = cfg.snapshot_profiles["local-test"]
+    profile.repo_homes = []
+    profile.include_paths = [str(source)]
+    profile.retention = {"path_daily": 1}
+
+    assert snapshot_init(profile)["ok"] is True
+    profile.tags = ["owner=before"]
+    first_run = snapshot_run(profile)
+    assert first_run["success"] is True, first_run
+    profile.tags = ["owner=after"]
+    second_run = snapshot_run(profile)
+    assert second_run["success"] is True, second_run
+
+    snapshots = ResticRunner(profile).run(ResticRunner(profile).snapshots_args())
+    assert snapshots["ok"] is True, snapshots
+    assert len(json.loads(snapshots["stdout"])) == 1

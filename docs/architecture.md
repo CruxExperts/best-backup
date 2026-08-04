@@ -99,9 +99,12 @@ Loads and validates the YAML config file. Discovers config location using the pr
 Owns native restic snapshot profiles. It discovers Git repositories, reconciles
 stable repository IDs in the state ledger, builds tagged backup commands, and
 records successful snapshot IDs. Configured retention is emitted as a separate
-`restic forget` command per active repository or include-path tag set; retired
-repositories are never selected automatically. Retired cleanup uses
-`purge-plan` with exact state-ledger snapshot IDs and remains dry-run-first.
+`restic forget` command per active repository or include-path. It filters by the
+configured host plus stable bbackup/profile/scope/ID tags and groups only by
+host, so mutable user tags cannot split retention policy. Retired repositories
+are never selected automatically.
+Retired cleanup uses `purge-plan` with exact state-ledger snapshot IDs and
+remains dry-run-first.
 Generated systemd services share a user-runtime `flock` lock.
 
 ### `bbackup/docker_backup.py`

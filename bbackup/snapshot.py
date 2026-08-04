@@ -202,20 +202,21 @@ def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo], 
             })
             continue
 
-        active_ids_for_path = [
+        matching_ids_for_path = [
             existing_id
             for existing_id, data in repos.items()
-            if data.get("path") == repo.path and data.get("status") == "active"
-            and (
-                existing_id == repo.repo_id
-                or existing_id == repo.legacy_repo_id
-                or data.get("fingerprint") in {repo.fingerprint, repo.legacy_fingerprint}
-            )
+            if data.get("path") == repo.path
+            and data.get("status") in {"active", "retired"}
+            and data.get("fingerprint") in {repo.fingerprint, repo.legacy_fingerprint}
         ]
-        if active_ids_for_path:
+        preserve_retired = any(
+            repos[existing_id].get("status") == "retired"
+            for existing_id in matching_ids_for_path
+        )
+        if matching_ids_for_path:
             merged_entry: Dict[str, Any] = {}
             merged_success_ids: List[str] = []
-            for existing_id in active_ids_for_path:
+            for existing_id in matching_ids_for_path:
                 existing_entry = repos.pop(existing_id)
                 merged_entry.update(existing_entry)
                 for snapshot_id in existing_entry.get("successful_snapshot_ids", []) or []:
@@ -223,6 +224,7 @@ def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo], 
                         merged_success_ids.append(snapshot_id)
             if repo.repo_id in repos:
                 current_entry = repos.pop(repo.repo_id)
+                preserve_retired = preserve_retired or current_entry.get("status") == "retired"
                 merged_entry.update(current_entry)
                 for snapshot_id in current_entry.get("successful_snapshot_ids", []) or []:
                     if snapshot_id not in merged_success_ids:
@@ -232,18 +234,18 @@ def reconcile_repos(profile: SnapshotProfile, discovered: List[DiscoveredRepo], 
             repos[repo.repo_id] = merged_entry
         repo_id = repo.repo_id
         entry = repos.setdefault(repo_id, {})
+        status = "retired" if preserve_retired or entry.get("status") == "retired" else "active"
         entry.update({
             "repo_id": repo_id,
             "path": repo.path,
             "fingerprint": repo.fingerprint,
             "origin": repo.origin,
             "head": repo.head,
-            "status": "active",
+            "status": status,
             "last_seen_at": now,
         })
         entry.setdefault("first_seen_at", now)
         entry.setdefault("successful_snapshot_ids", [])
-
     for repo_id, entry in repos.items():
         if entry.get("status") != "active":
             continue
@@ -343,11 +345,14 @@ class ResticRunner:
         self,
         tags: Iterable[str],
         policy: Dict[str, int],
+        host: str,
         dry_run: bool = True,
     ) -> List[str]:
         tag_values = list(tags)
         if not tag_values:
             raise SnapshotError("Refusing to build a retention command without tags")
+        if not host:
+            raise SnapshotError("Refusing to build a retention command without a host")
         if not policy:
             raise SnapshotError("Refusing to build a retention command without a policy")
         selected_periods = [period for period in ("daily", "weekly", "monthly") if period in policy]
@@ -356,7 +361,16 @@ class ResticRunner:
         args = [*self.base_args(), "forget"]
         if dry_run:
             args.append("--dry-run")
-        args.extend(["--tag", ",".join(tag_values), "--group-by", "tags"])
+        args.extend(
+            [
+                "--host",
+                host,
+                "--tag",
+                ",".join(tag_values),
+                "--group-by",
+                "host",
+            ]
+        )
         for period in selected_periods:
             args.extend([f"--keep-{period}", str(policy[period])])
         return args
@@ -446,7 +460,12 @@ def _retention_policy(profile: SnapshotProfile, scope: str) -> Optional[Dict[str
 
 
 def _retention_tags(profile: SnapshotProfile, scope: str, identifier: str) -> List[str]:
-    return common_tags(profile, scope, [f"{scope}_id={identifier}"])
+    return [
+        "bbackup",
+        f"profile={profile.name}",
+        f"scope={scope}",
+        f"{scope}_id={identifier}",
+    ]
 
 
 def _retention_command(
@@ -463,9 +482,10 @@ def _retention_command(
     return {
         "scope": scope,
         "identifier": identifier,
+        "host": profile.host_id,
         "policy": policy,
         "tags": tags,
-        "args": runner.retention_args(tags, policy, dry_run=dry_run),
+        "args": runner.retention_args(tags, policy, profile.host_id, dry_run=dry_run),
     }
 
 

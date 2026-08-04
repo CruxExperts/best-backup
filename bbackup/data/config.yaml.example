@@ -233,8 +233,8 @@ snapshot_profiles:
       - "**/node_modules"
       - "**/.venv"
     retention:
-      # Retention is emitted as a scoped restic forget command. Active repo
-      # policies never select retired repo IDs or other profile snapshots.
+      # Retention filters by host_id plus stable scope/ID tags and groups by host.
+      # Mutable user tags, retired IDs, and other hosts are never selected.
       active_repo_daily: 14
       active_repo_weekly: 8
       active_repo_monthly: 12
