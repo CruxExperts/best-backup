@@ -3,6 +3,8 @@ Tests for bbman auth-gdrive and its rclone OAuth helper.
 """
 
 import json
+import subprocess
+import sys
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -35,6 +37,22 @@ def fake_credentials(*, refresh_token="refresh-secret"):
         refresh_token=refresh_token,
         expiry=datetime(2026, 7, 9, 13, 30, tzinfo=timezone.utc),
     )
+
+def test_bbman_import_does_not_eagerly_load_management():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import bbackup.bbman; "
+            "assert 'bbackup.management' not in sys.modules",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
 
 
 def test_missing_optional_dependency_returns_install_hint(tmp_path):
@@ -276,6 +294,79 @@ def test_rclone_config_update_with_force_sets_refresh_flag(tmp_path):
     assert method == "config/update"
     assert payload["parameters"]["config_refresh_token"] == "false"
     assert result["rclone"]["action"] == "update"
+
+
+def test_rclone_config_continues_state_only_transitions():
+    responses = [
+        {"State": "client_id", "Option": None, "Result": ""},
+        {},
+    ]
+    with patch(
+        "bbackup.management.gdrive_auth._call_rclone_rc",
+        side_effect=responses,
+    ) as rc:
+        result = gdrive_auth._run_rclone_config(
+            remote="bbackup-gdrive",
+            client_id="client-id",
+            client_secret="super-secret",
+            scope="drive",
+            token_json='{"refresh_token":"refresh-secret"}',
+            action="create",
+        )
+
+    assert result["action"] == "create"
+    assert rc.call_count == 2
+    method, payload, _ = rc.call_args_list[1].args
+    assert method == "config/create"
+    assert payload["opt"]["continue"] is True
+    assert payload["opt"]["state"] == "client_id"
+    assert payload["opt"]["result"] == ""
+
+
+def test_rclone_config_accepts_32_continuations():
+    responses = [
+        {"State": f"state-{index}", "Option": None, "Result": ""}
+        for index in range(32)
+    ] + [{}]
+    with patch(
+        "bbackup.management.gdrive_auth._call_rclone_rc",
+        side_effect=responses,
+    ) as rc:
+        result = gdrive_auth._run_rclone_config(
+            remote="bbackup-gdrive",
+            client_id="client-id",
+            client_secret="super-secret",
+            scope="drive",
+            token_json='{"refresh_token":"refresh-secret"}',
+            action="create",
+        )
+
+    assert result["action"] == "create"
+    assert rc.call_count == 33
+
+
+
+def test_rclone_config_rejects_pending_questions():
+    pending = {
+        "State": "*postconfig",
+        "Option": {"Name": "config_team_drive"},
+        "Result": "refresh-secret",
+    }
+    with patch("bbackup.management.gdrive_auth._call_rclone_rc", return_value=pending):
+        with pytest.raises(gdrive_auth.RcloneError) as exc:
+            gdrive_auth._run_rclone_config(
+                remote="bbackup-gdrive",
+                client_id="client-id",
+                client_secret="super-secret",
+                scope="drive",
+                token_json='{"refresh_token":"refresh-secret"}',
+                action="create",
+            )
+
+    assert "additional configuration input" in str(exc.value)
+    assert "refresh-secret" not in str(exc.value)
+    assert gdrive_auth.REDACTION in str(exc.value)
+
 
 
 def test_rc_daemon_uses_private_unix_socket_without_google_secrets_in_argv():
