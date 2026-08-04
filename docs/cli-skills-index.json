@@ -71,52 +71,56 @@
     "end": 648,
     "start": 616
   },
-  "bbman:check-deps": {
-    "end": 690,
+  "bbman:auth-gdrive": {
+    "end": 699,
     "start": 649
   },
+  "bbman:check-deps": {
+    "end": 741,
+    "start": 700
+  },
   "bbman:check-updates": {
-    "end": 722,
-    "start": 691
+    "end": 773,
+    "start": 742
   },
   "bbman:cleanup": {
-    "end": 758,
-    "start": 723
+    "end": 809,
+    "start": 774
   },
   "bbman:diagnostics": {
-    "end": 790,
-    "start": 759
+    "end": 841,
+    "start": 810
   },
   "bbman:health": {
-    "end": 821,
-    "start": 791
+    "end": 872,
+    "start": 842
   },
   "bbman:repo-url": {
-    "end": 853,
-    "start": 822
+    "end": 904,
+    "start": 873
   },
   "bbman:run": {
-    "end": 874,
-    "start": 854
+    "end": 925,
+    "start": 905
   },
   "bbman:setup": {
-    "end": 905,
-    "start": 875
+    "end": 956,
+    "start": 926
   },
   "bbman:skills": {
-    "end": 933,
-    "start": 906
+    "end": 984,
+    "start": 957
   },
   "bbman:status": {
-    "end": 964,
-    "start": 934
+    "end": 1015,
+    "start": 985
   },
   "bbman:update": {
-    "end": 998,
-    "start": 965
+    "end": 1049,
+    "start": 1016
   },
   "bbman:validate-config": {
-    "end": 1029,
-    "start": 999
+    "end": 1080,
+    "start": 1050
   }
 }

@@ -612,6 +612,59 @@ BBACKUP_SKILLS: Dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 BBMAN_SKILLS: Dict[str, Any] = {
+    "auth-gdrive": {
+        "id": "auth-gdrive",
+        "summary": "Authorize Google Drive and create or update a dedicated rclone Drive remote.",
+        "common": False,
+        "workflow": ["auth-gdrive", "validate-config", "health"],
+        "steps": [
+            {
+                "command": "bbman auth-gdrive --client-secrets client_secret.json --output json",
+                "description": (
+                    "Run Google Desktop app loopback OAuth and configure the rclone "
+                    "Drive remote used by bbackup. Requires the optional gdrive-auth extra."
+                ),
+                "required_flags": ["--client-secrets"],
+                "optional_flags": {
+                    "--remote": "rclone remote name to create or update (default bbackup-gdrive)",
+                    "--scope": "rclone Google Drive scope name (default drive)",
+                    "--port": "loopback callback port on 127.0.0.1 (default 53682)",
+                    "--timeout": "OAuth local server timeout in seconds (default 300)",
+                    "--no-open-browser": "print the auth URL instead of opening a browser",
+                    "--dry-run": "validate inputs and show planned setup without OAuth or rclone writes",
+                    "--force": "update an existing rclone remote instead of failing",
+                    "--output": "text or json",
+                },
+                "valid_values": {"--output": ["text", "json"]},
+                "input_json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "client_secrets": {"type": "string"},
+                        "remote": {"type": "string", "default": "bbackup-gdrive"},
+                        "scope": {"type": "string", "default": "drive"},
+                        "port": {"type": "integer", "default": 53682},
+                        "timeout": {"type": "integer", "default": 300},
+                        "no_open_browser": {"type": "boolean", "default": False},
+                        "dry_run": {"type": "boolean", "default": False},
+                        "force": {"type": "boolean", "default": False},
+                        "output": {"type": "string", "enum": ["text", "json"]},
+                    },
+                    "required": ["client_secrets"],
+                },
+            },
+        ],
+        "examples": [
+            "bbman auth-gdrive --client-secrets client_secret.json --dry-run --output json",
+            "bbman auth-gdrive --client-secrets client_secret.json --remote bbackup-gdrive",
+            "bbman auth-gdrive --client-secrets client_secret.json --no-open-browser",
+        ],
+        "output_format": (
+            '{"remote": "bbackup-gdrive", "scope": "drive", "dry_run": false, '
+            '"oauth": {...}, "rclone": {"action": "create|update"}}'
+        ),
+        "exit_codes": {0: "success", 1: "user error or missing optional extra", 3: "rclone/system error"},
+    },
+
     "setup": {
         "id": "setup",
         "summary": "First-time setup, config validation, and system health check.",

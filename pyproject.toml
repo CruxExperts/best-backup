@@ -45,6 +45,11 @@ dependencies = [
 management = [
   "gitpython>=3.1.0",
 ]
+gdrive-auth = [
+  "google-auth-oauthlib>=1.4.0,<2",
+  "oauthlib>=3.2.1",
+  "requests-oauthlib>=2.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/CruxExperts/best-backup"

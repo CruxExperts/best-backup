@@ -44,6 +44,8 @@ _localsetup/
 .codex/sessions/
 .codex/logs/
 .codex/tmp/
+.localsetup-maint/
+/state/
 
 # Release and maintenance tooling (local only, not published)
 maintenance/
@@ -78,3 +80,4 @@ bbackup.egg-info/
 .env
 *.pem
 *.key
+client_secret*.json

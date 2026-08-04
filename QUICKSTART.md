@@ -118,13 +118,19 @@ Uses rsync `--link-dest` so unchanged files are hardlinked from the previous bac
 
 ### Send to Google Drive
 
-1. Configure rclone first:
+1. Install the optional OAuth helper and configure a rclone remote:
    ```bash
-   rclone config
-   # Create a remote named "gdrive"
+   uv sync --extra gdrive-auth
+   bbman auth-gdrive --client-secrets client_secret.json --remote gdrive
    ```
 
-2. Add to your config:
+   Use `--dry-run --output json` first to validate the client secrets file
+   without opening OAuth or writing rclone config. On an SSH-hosted install,
+   connect with `ssh -L 53682:127.0.0.1:53682 user@server`, then run
+   `bbman auth-gdrive --client-secrets client_secret.json --no-open-browser
+   --port 53682` inside that session and open its printed URL locally.
+
+2. Add the remote to your config:
    ```yaml
    remotes:
      gdrive:
@@ -207,6 +213,12 @@ sudo yum install rsync          # RHEL / CentOS
 
 ```bash
 curl https://rclone.org/install.sh | sudo bash
+```
+
+**Google Drive OAuth helper not installed**
+
+```bash
+uv sync --extra gdrive-auth
 ```
 
 **Config not found**

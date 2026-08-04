@@ -83,6 +83,66 @@ Reports YAML syntax errors, missing required fields, invalid paths, and unrecogn
 
 ---
 
+### `bbman auth-gdrive`
+
+Authorize Google Drive and create or update a dedicated rclone Drive remote.
+bbackup still uses rclone for transfers; this command only performs OAuth setup
+and writes the rclone remote configuration.
+
+```bash
+uv sync --extra gdrive-auth
+bbman auth-gdrive --client-secrets client_secret.json --dry-run --output json
+bbman auth-gdrive --client-secrets client_secret.json --remote bbackup-gdrive
+bbman auth-gdrive --client-secrets client_secret.json --no-open-browser
+```
+
+Required:
+
+- `--client-secrets PATH`: Google Desktop app OAuth client secrets JSON.
+
+Defaults:
+
+- `--remote bbackup-gdrive`
+- `--scope drive`
+- `--port 53682`
+- `--timeout 300`
+
+Safety behavior:
+
+- `--dry-run` validates the secrets file and planned rclone setup without OAuth
+  or rclone writes.
+- Existing rclone remotes are preserved unless `--force` is passed.
+- `--no-open-browser` uses the same loopback OAuth flow but leaves URL opening
+  to the user. For an SSH-hosted install, first connect from the workstation
+  with `ssh -L 53682:127.0.0.1:53682 user@server`, then run the command with
+  `--no-open-browser --port 53682` inside that session and open its printed URL
+  on the workstation. It requires text output during OAuth; JSON mode suppresses
+  prompts to preserve valid machine-readable output.
+- The command never accepts a raw `--client-secret` value and redacts client
+  secrets, access tokens, refresh tokens, and token JSON from output.
+- The temporary rclone RC server uses a Unix socket inside a mode-0700
+  directory. Google credentials appear only in its local request body, never in
+  process arguments or a TCP listener.
+
+JSON example:
+
+```bash
+bbman auth-gdrive --input-json '{"client_secrets":"client_secret.json","dry_run":true}' --output json
+```
+
+Configure bbackup to use the resulting rclone remote:
+
+```yaml
+remotes:
+  gdrive:
+    enabled: true
+    type: rclone
+    remote_name: bbackup-gdrive
+    path: /backups/docker
+```
+
+---
+
 ### `bbman status`
 
 Show backup history.
@@ -200,6 +260,7 @@ Discover what `bbman` can do. Useful for AI agents performing progressive capabi
 ```bash
 bbman skills                     # Level-0: list all skill ids and summaries (JSON)
 bbman skills setup               # Level-1: step-by-step guide + JSON schemas (JSON)
+bbman skills auth-gdrive
 bbman skills maintenance
 bbman skills updates
 bbman skills dependencies
@@ -267,7 +328,9 @@ update_method: "git"           # git, download, or manual
 
 ## First-run detection
 
-On first launch, `bbman` checks for `~/.config/bbackup/config.yaml` and `~/.local/share/bbackup/.first_run_complete`. If either is missing, the setup wizard runs automatically. You can also trigger it manually at any time with `bbman setup`.
+Run `bbman setup` explicitly on first use to create the initial config and mark
+first-run setup complete. If config is missing, validation commands report the
+missing state and point back to `bbman setup`.
 
 ---
 
