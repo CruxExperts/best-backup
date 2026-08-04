@@ -37,7 +37,6 @@ from bbackup.cli_utils import (
     BBACKUP_NO_INTERACTIVE_ENV,
 )
 from bbackup.skills import get_skill
-from bbackup.management import gdrive_auth as gdrive_auth_module
 
 
 SKILLS_DOC_RESOURCE = "cli-skills.md"
@@ -744,6 +743,15 @@ def auth_gdrive(ctx, client_secrets, remote, scope, port, timeout, no_open_brows
             EXIT_USER_ERROR,
             output,
         )
+    try:
+        from bbackup.management import gdrive_auth as gdrive_auth_module
+    except Exception as e:
+        message = str(e)
+        render_output({}, output, "auth-gdrive", success=False, errors=[message])
+        if output != "json":
+            console.print(f"[red]Error loading Google Drive support: {message}[/red]")
+        sys.exit(EXIT_SYSTEM_ERROR)
+
     try:
         result = gdrive_auth_module.auth_gdrive(
             client_secrets=client_secrets,

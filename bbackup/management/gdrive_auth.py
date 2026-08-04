@@ -66,7 +66,7 @@ def redact(value: Any, secrets: list[str] | None = None) -> Any:
     if isinstance(value, dict):
         redacted: dict[str, Any] = {}
         for key, item in value.items():
-            if key in SENSITIVE_KEYS:
+            if str(key).lower() in SENSITIVE_KEYS:
                 redacted[key] = REDACTION
             else:
                 redacted[key] = redact(item, secrets)
@@ -336,6 +336,31 @@ def _call_rclone_rc(method: str, payload: dict[str, Any], secrets: list[str]) ->
                     process.wait(timeout=5)
 
 
+def _rclone_config_response(response: dict[str, Any], secrets: list[str]) -> tuple[str, str]:
+    """Inspect an RC config response and return its next state and result."""
+    if not isinstance(response, dict):
+        raise RcloneError("rclone config returned an invalid response.")
+
+    error = response.get("Error", response.get("error"))
+    if error:
+        details = str(redact(error, secrets))
+        raise RcloneError(f"rclone config failed: {details}")
+
+    option = response.get("Option", response.get("option"))
+    if option:
+        details = json.dumps(redact(response, secrets), sort_keys=True)
+        raise RcloneError(
+            "rclone requested additional configuration input; "
+            f"non-interactive setup cannot continue: {details}"
+        )
+
+    state = response.get("State", response.get("state")) or ""
+    result = response.get("Result", response.get("result")) or ""
+    if not isinstance(state, str) or not isinstance(result, str):
+        raise RcloneError("rclone config returned an invalid continuation response.")
+    return state, result
+
+
 def _run_rclone_config(
     *,
     remote: str,
@@ -373,7 +398,23 @@ def _run_rclone_config(
             "opt": {"obscure": True, "nonInteractive": True, "noOutput": True},
         }
 
-    _call_rclone_rc(method, payload, secrets)
+    response = _call_rclone_rc(method, payload, secrets)
+    for step in range(33):
+        state, result = _rclone_config_response(response, secrets)
+        if not state:
+            break
+        if step == 32:
+            raise RcloneError("rclone config did not complete within 32 continuation steps.")
+        payload = {
+            **payload,
+            "opt": {
+                **payload["opt"],
+                "continue": True,
+                "state": state,
+                "result": result,
+            },
+        }
+        response = _call_rclone_rc(method, payload, secrets)
 
     return {
         "remote": remote,
