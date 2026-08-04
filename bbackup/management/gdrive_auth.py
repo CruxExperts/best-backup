@@ -377,6 +377,7 @@ def _run_rclone_config(
         "scope": scope,
         "token": token_json,
         "config_refresh_token": "false",
+        "config_change_team_drive": "false",
     }
     if action not in {"create", "update"}:
         raise RcloneError(f"Unsupported rclone configuration action: {action}")

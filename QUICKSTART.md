@@ -125,8 +125,10 @@ Uses rsync `--link-dest` so unchanged files are hardlinked from the previous bac
    ```
 
    Use `--dry-run --output json` first to validate the client secrets file
-   without opening OAuth or writing rclone config. On an SSH-hosted install,
-   connect with `ssh -L 53682:127.0.0.1:53682 user@server`, then run
+   without opening OAuth or writing rclone config. The helper targets My Drive
+   by default; shared-drive selection is not exposed by this command. On an
+   SSH-hosted install, connect with `ssh -L 53682:127.0.0.1:53682 user@server`,
+   then run
    `bbman auth-gdrive --client-secrets client_secret.json --no-open-browser
    --port 53682` inside that session and open its printed URL locally.
 

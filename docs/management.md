@@ -88,6 +88,8 @@ Reports YAML syntax errors, missing required fields, invalid paths, and unrecogn
 Authorize Google Drive and create or update a dedicated rclone Drive remote.
 bbackup still uses rclone for transfers; this command only performs OAuth setup
 and writes the rclone remote configuration.
+The helper targets My Drive by default; shared-drive selection is not exposed
+by this command.
 
 ```bash
 uv sync --extra gdrive-auth

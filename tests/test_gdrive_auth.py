@@ -273,6 +273,7 @@ def test_rclone_config_create_uses_rc_body_not_secret_argv(tmp_path):
     assert payload["type"] == "drive"
     assert payload["parameters"]["token"]
     assert payload["parameters"]["client_secret"] == "super-secret"
+    assert payload["parameters"]["config_change_team_drive"] == "false"
     command_preview = " ".join(result["rclone"]["rclone_command"])
     assert "super-secret" not in command_preview
     assert "refresh-secret" not in command_preview
