@@ -30,17 +30,18 @@ def docker_client():
 
 
 @pytest.fixture(scope="session")
-def alpine_rsync_image(docker_client):
-    """Build a minimal alpine image with rsync available."""
+def alpine_rsync_image(docker_client, worker_id):
+    """Build a per-worker Alpine image with rsync available."""
+    tag = f"bbackup-alpine-rsync:{worker_id}"
     dockerfile = b"FROM alpine:latest\nRUN apk add --no-cache rsync\n"
-    image, _ = docker_client.images.build(
+    docker_client.images.build(
         fileobj=io.BytesIO(dockerfile),
-        tag="bbackup-alpine-rsync:test",
+        tag=tag,
         rm=True,
     )
-    yield image
+    yield tag
     try:
-        docker_client.images.remove("bbackup-alpine-rsync:test", force=True)
+        docker_client.images.remove(tag, force=True)
     except Exception:
         pass
 
@@ -88,7 +89,7 @@ def test_backup_volume_rsync_path(docker_client, alpine_rsync_image, seeded_volu
     original_run = docker_client.containers.run
 
     def patched_run(image, **kwargs):
-        return original_run("bbackup-alpine-rsync:test", **kwargs)
+        return original_run(alpine_rsync_image, **kwargs)
 
     with pytest.MonkeyPatch.context() as m:
         m.setattr(docker_client.containers, "run", patched_run)
@@ -186,7 +187,7 @@ def test_backup_volume_incremental_hardlinks(docker_client, alpine_rsync_image, 
     original_run = docker_client.containers.run
 
     def patched_run(image, **kwargs):
-        return original_run("bbackup-alpine-rsync:test", **kwargs)
+        return original_run(alpine_rsync_image, **kwargs)
 
     with pytest.MonkeyPatch.context() as m:
         m.setattr(docker_client.containers, "run", patched_run)
@@ -445,7 +446,7 @@ def test_restore_volume_roundtrip(docker_client, alpine_rsync_image, seeded_volu
     original_run = docker_client.containers.run
 
     def patched_run(image, **kwargs):
-        return original_run("bbackup-alpine-rsync:test", **kwargs)
+        return original_run(alpine_rsync_image, **kwargs)
 
     # Backup
     with pytest.MonkeyPatch.context() as m:

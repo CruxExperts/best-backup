@@ -6,8 +6,16 @@ Created: 2026-02-26
 Last Updated: 2026-02-26
 """
 
-import pytest
+import os
 from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
+    """Use half the detected CPUs, capped at eight workers."""
+    del config
+    return max(1, min(8, (os.cpu_count() or 1) // 2))
 
 
 @pytest.fixture
