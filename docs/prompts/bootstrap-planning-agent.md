@@ -1,6 +1,10 @@
-# Bootstrap Planning Agent Prompt
+# Bootstrap planning agent prompt
 
 Use this prompt to hand the active `bbackup` checkout to a planning agent.
+
+This is a public maintainer prompt. It describes repository inspection only; it
+does not authorize domain changes, service operations, or publication.
+
 
 ```text
 You are the planning agent for the active `bbackup` checkout.

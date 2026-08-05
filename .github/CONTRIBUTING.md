@@ -60,7 +60,7 @@ This project uses [conventional commits](https://www.conventionalcommits.org/) f
 
 One subject line, imperative mood, no trailing period. Example:
 
-```
+```text
 fix: handle missing Docker socket gracefully
 
 Closes #12
@@ -85,7 +85,7 @@ Use the bug report issue template. The more detail you include (OS, Docker versi
 
 ---
 
-## Code of Conduct
+## Code of conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). Treat everyone with respect.
 

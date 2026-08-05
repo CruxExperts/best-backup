@@ -19,7 +19,7 @@ assignees: ''
 
 <!-- Paste the exact command you ran and the full output, including any error messages. -->
 
-```
+```text
 $ bbackup ...
 
 ```

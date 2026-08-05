@@ -12,14 +12,16 @@ Use this checklist before making the repository public or cutting a release.
 - [ ] `.github/ISSUE_TEMPLATE/` and `.github/pull_request_template.md` are present.
 - [ ] `LICENSE` has the intended owner and license.
 - [ ] `docs/VERSIONING.md` describes release/version checks and local hook setup.
+- [ ] The [GitHub Markdown Writing Standard](standards/github-markdown/github-markdown-writing-standard.md), review checklist,
+      capabilities reference, and provenance register are current and linked from the documentation index.
 
 ## Automation
 
 - [ ] `git config core.hooksPath .githooks` is set in the active checkout.
 - [ ] `.githooks/commit-msg` validates conventional commit subjects.
 - [ ] `.githooks/pre-push` runs version sync, generated-doc checks, and whitespace checks.
-- [ ] `.github/workflows/ci.yml` runs syntax, tests, CLI docs, version sync, support doc presence, and publishing readiness checks.
-- [ ] `.github/workflows/release-notes.yml` verifies the tag, builds with `uv build`, and creates a GitHub release from `v*` tags.
+- [ ] `.github/workflows/ci.yml` runs syntax, tests, CLI docs, Markdown standards, version sync, support doc presence, and publishing readiness checks.
+- [ ] `.github/workflows/release-notes.yml` verifies the tag, Markdown standards, version and publishing checks, builds with `uv build`, and creates a GitHub release from `v*` tags.
 - [ ] CI tests Python `3.12`, `3.13`, and `3.14`, matching the supported package classifiers.
 - [ ] CI and release workflows smoke test the installed wheel.
 - [ ] GitHub workflow actions are on current supported major versions.
@@ -38,6 +40,7 @@ Use this checklist before making the repository public or cutting a release.
 - [ ] `uv sync --locked` passes.
 - [ ] `uv run python scripts/check_version_sync.py` passes.
 - [ ] `uv run python scripts/check_publishing_ready.py` passes.
+- [ ] `uv run python scripts/check_markdown_standards.py` passes.
 - [ ] `uv run python scripts/generate_cli_skills.py --check` passes.
 
 ## Scrub
@@ -52,6 +55,7 @@ Use this checklist before making the repository public or cutting a release.
 
 ```bash
 uv sync --locked
+uv run python scripts/check_markdown_standards.py
 uv run python scripts/check_version_sync.py
 uv run python scripts/check_publishing_ready.py
 uv run python scripts/generate_cli_skills.py --check

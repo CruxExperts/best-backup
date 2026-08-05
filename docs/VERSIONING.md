@@ -9,6 +9,7 @@ references must match it before publishing:
 - README version badge
 - `CHANGELOG.md` current release header and `[Unreleased]` compare target
 - generated CLI skills docs
+- GitHub-facing Markdown standards and provenance checks
 
 Normal release batches use a patch bump by default, including commits with
 `feat:` subjects. Use a `Release-Type: major|minor|patch|none` trailer in the
@@ -59,6 +60,7 @@ before push.
 ```bash
 uv sync --locked
 uv run python scripts/check_version_sync.py
+uv run python scripts/check_markdown_standards.py
 uv run python scripts/check_publishing_ready.py
 uv run python scripts/generate_cli_skills.py --check
 uv run python -m py_compile bbackup.py bbman.py bbackup/*.py bbackup/data/*.py bbackup/management/*.py scripts/*.py

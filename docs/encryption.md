@@ -68,7 +68,7 @@ Copying key files to every backup server manually is annoying. The public key ca
 
 1. Go to [gist.github.com](https://gist.github.com)
 2. Paste the contents of `backup_public.pem`
-3. Create the gist (can be secret)
+3. Create the gist. A secret gist is unlisted, not private, so upload only the public key and treat the raw URL as shareable.
 4. Click "Raw" to get the URL
 
 ### Reference it in config
@@ -100,14 +100,14 @@ For Gists, use the explicit Gist ID form. Gist descriptions and filenames are no
 
 When you use the username-only form, bbackup can find public keys in standard repositories:
 
-```
+```text
 https://raw.githubusercontent.com/USERNAME/bbackup-keys/main/backup_public.pem
 https://raw.githubusercontent.com/USERNAME/backup-keys/main/backup_public.pem
 ```
 
 Put `backup_public.pem` in a public `bbackup-keys` or `backup-keys` repository, or use an explicit raw URL:
 
-```
+```text
 https://raw.githubusercontent.com/YOUR_USERNAME/REPO/main/backup_public.pem
 ```
 

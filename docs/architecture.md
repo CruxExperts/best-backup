@@ -115,7 +115,7 @@ Talks to the Docker API. Starts temporary Alpine containers, mounts target volum
 
 Orchestrates the full backup workflow:
 
-```
+```text
 init → select items → prepare staging dir
   → backup configs → backup volumes → backup networks
   → backup filesystem paths (if filesystem_targets provided)
@@ -288,7 +288,7 @@ flowchart LR
 
 ## Repository structure
 
-```
+```text
 best-backup/
 ├── bbackup/                # Main package
 │   ├── cli.py

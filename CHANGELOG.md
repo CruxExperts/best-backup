@@ -301,6 +301,8 @@ current uv-based install, development, and release instructions.
 
 ---
 
+The `Unreleased` comparison is a live `HEAD` link for navigation, not an immutable historical citation.
+
 [Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.8.5...HEAD
 [1.8.5]: https://github.com/CruxExperts/best-backup/compare/v1.8.4...v1.8.5
 [1.8.4]: https://github.com/CruxExperts/best-backup/compare/v1.8.3...v1.8.4

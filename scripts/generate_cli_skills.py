@@ -34,6 +34,10 @@ def _render_header(lines: List[str]) -> None:
         f"> Generated from the bbackup/bbman CLI metadata. "
         f"Version: {BBACKUP_VERSION}. This catalog is authoritative for this version."
     )
+    lines.append(
+        "> Source: `bbackup/cli_metadata.py` rendered by `scripts/generate_cli_skills.py`; "
+        "run the generator's `--check` mode before publishing."
+    )
     lines.append("")
 
 
@@ -41,7 +45,7 @@ def _render_command_section(lines: List[str], cmd: CliCommand) -> None:
     # Heading pattern is stable and indexable
     lines.append(f"### {cmd.cli} {cmd.name}")
     lines.append("")
-    lines.append(f"**Summary**: {cmd.summary}")
+    lines.append(f"Summary: {cmd.summary}")
     lines.append("")
     if cmd.description:
         lines.append(cmd.description)
@@ -52,10 +56,10 @@ def _render_command_section(lines: List[str], cmd: CliCommand) -> None:
     env_params = [p for p in cmd.parameters if p.kind == "env_var"]
 
     if cli_params:
-        lines.append("#### CLI parameters")
+        lines.append(f"#### CLI parameters for `{cmd.cli} {cmd.name}`")
         lines.append("")
         lines.append("| Name | Type | Required | Default | Description |")
-        lines.append("|---|---|:---:|---|---|")
+        lines.append("|:--|:--|:--:|:--|:--|")
         for p in cli_params:
             name = p.cli_flag or p.name
             default = "" if p.default is None else repr(p.default)
@@ -65,10 +69,10 @@ def _render_command_section(lines: List[str], cmd: CliCommand) -> None:
         lines.append("")
 
     if json_params or env_params:
-        lines.append("#### JSON / environment parameters")
+        lines.append(f"#### JSON and environment parameters for `{cmd.cli} {cmd.name}`")
         lines.append("")
         lines.append("| Name | Kind | Type | Required | Default | Description |")
-        lines.append("|---|---|---|:---:|---|---|")
+        lines.append("|:--|:--|:--|:--:|:--|:--|")
         for p in json_params:
             name = p.json_key or p.name
             default = "" if p.default is None else repr(p.default)
@@ -84,7 +88,7 @@ def _render_command_section(lines: List[str], cmd: CliCommand) -> None:
         lines.append("")
 
     if cmd.examples:
-        lines.append("#### Examples")
+        lines.append(f"#### Examples for `{cmd.cli} {cmd.name}`")
         lines.append("")
         for ex in cmd.examples:
             lines.append(f"- {ex.description}")

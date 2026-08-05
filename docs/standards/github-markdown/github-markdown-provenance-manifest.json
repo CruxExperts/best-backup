@@ -1,0 +1,72 @@
+{
+  "schema": "bbackup/github-markdown-provenance/1",
+  "generated_at": "2026-08-04T19:25:53-05:00",
+  "review_after": "2026-11-04",
+  "generated_by": {
+    "agent": "OpenAI Codex",
+    "model": "openai-codex/gpt-5.6-luna"
+  },
+  "source_inputs": [
+    {
+      "filename": "github-markdown-capabilities-reference.md",
+      "sha256_before_adaptation": "f06096c5d4470ce7422a50d99acb04a4bcb1f74df6039dbc01bfa6205bdc0131"
+    },
+    {
+      "filename": "github-markdown-writing-standard.md",
+      "sha256_before_adaptation": "bcbf90ed55b55f7f1da924bf7dfa818be0a4baea358fdb40c1ec6d1d02910a83"
+    },
+    {
+      "filename": "github-markdown-review-checklist.md",
+      "sha256_before_adaptation": "6b29bc0c000acf38dc2b0fa82c7483121cbf87765b165aa6b1c2557f51c2eacb"
+    },
+    {
+      "filename": "github-markdown-source-provenance.md",
+      "sha256_before_adaptation": "f653d7a44bcebcbb4c31a483e1e43d14db457d0f214bd07eb7a5bc7c80ae9b0d"
+    }
+  ],
+  "adapted_outputs": [
+    {
+      "path": "docs/standards/github-markdown/github-markdown-capabilities-reference.md",
+      "version": "1.1.0",
+      "sha256_after_adaptation": "34abcac2064c7cc974f05810a62840af34f05a2dd5e06429672ad21e7b0cde9d",
+      "changes": [
+        "Retargeted stable identity, adoption status, authority, and publication scope.",
+        "Replaced generic commands, diagrams, and missing assets with bbackup examples, a visible control table, and an explicit support boundary; corrected closing-keyword context to pull-request descriptions and commit messages."
+      ]
+    },
+    {
+      "path": "docs/standards/github-markdown/github-markdown-writing-standard.md",
+      "version": "1.1.0",
+      "sha256_after_adaptation": "abdee1bf4b56a3fbfa9476279cfd42c41af94b54f1d1525202fcdcf44a888caf",
+      "changes": [
+        "Added bbackup publication scope, authority hierarchy, metadata rendering boundary, and template exception.",
+        "Retargeted examples and retained the supplied normative rules; corrected closing-keyword context to pull-request descriptions and commit messages; documented the structured changelog heading exception."
+      ]
+    },
+    {
+      "path": "docs/standards/github-markdown/github-markdown-review-checklist.md",
+      "version": "1.1.0",
+      "sha256_after_adaptation": "1a14002e7d40d73713999fc07243f5154f8a89bd8f1a5b3784bed497a14ff79d",
+      "changes": [
+        "Added bbackup generated-document, safety, public-scrub, asset, and template checks, plus a visible control table.",
+        "Linked the governing standard and source register; scoped heading uniqueness to exclude only release-category headings in `CHANGELOG.md`."
+      ]
+    },
+    {
+      "path": "docs/standards/github-markdown/github-markdown-source-provenance.md",
+      "version": "1.1.0",
+      "sha256_after_adaptation": "26b651492c94b08d6ab8a411ba0f215bbd253bca4c74d234d0d5b29e23bfe4af",
+      "integrity_authority": "SHA-256 recorded in this separate manifest; the source-provenance file does not embed its own hash.",
+      "changes": [
+        "Added source input checksums, retained original metadata, and recorded the transformation ledger.",
+        "Marked moving github/docs main-branch links as live and non-immutable evidence; the transformation ledger remains the source of truth for adapted-output hashes; it also records the final heading and anchor validation refinements."
+      ]
+    }
+  ],
+  "validation": {
+    "source_copy_hashes_verified": true,
+    "local_links_checked": true,
+    "markdown_standards_checker": "scripts/check_markdown_standards.py",
+    "license_handling": "The supplied files remain license-unspecified; adaptation does not relicense them."
+  }
+}

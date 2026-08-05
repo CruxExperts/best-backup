@@ -1,16 +1,12 @@
-<div align="center">
+# bbackup
 
-# 🗄️ bbackup
-
-**Back up Docker containers and host filesystems — encrypted, incremental, and agent-ready.**
+**Back up Docker containers and host filesystems: encrypted, incremental, and agent-ready.**
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.8.5-6366f1?style=flat-square)](CHANGELOG.md)
 
-[Quick start](#quick-start) · [Filesystem backup](#filesystem-backup) · [Agent integration](#agent-integration) · [CLI reference](#cli-reference) · [Docs](#documentation)
-
-</div>
+[Quick start](#quick-start) · [Filesystem backup](#filesystem-backup) · [Agent integration](#agent-integration) · [CLI reference](#cli-reference) · [Documentation](#documentation)
 
 ![bbackup backup pipeline showing Docker, filesystem, database, encryption, verification, and remote storage destinations](docs/assets/bbackup-hero.png)
 
@@ -32,6 +28,10 @@ Every command speaks structured JSON, making it compatible with AI agents out of
 
 > [!TIP]
 > Use `--dry-run --output json` before destructive restore work or scheduled backup changes. The JSON plan is designed for both humans and automation.
+
+The flow collects Docker and filesystem inputs, writes a manifest, encrypts the
+artifacts, uploads them, and verifies the manifest before restore.
+
 
 ## Backup flow
 
@@ -55,35 +55,41 @@ flowchart LR
 
 ## Features
 
-| | Feature | Description |
-|:---:|:---|:---|
-| 🖥️ | **Rich TUI** | BTOP-style live dashboard with real-time transfer metrics |
-| 🐳 | **Docker backup** | Containers, volumes, networks, and configs in one shot |
-| 📁 | **Filesystem backup** | Back up any host path recursively with gitignore-style excludes |
-| ⚡ | **Incremental backups** | rsync `--link-dest` so unchanged data is hardlinked, not copied |
-| 🔐 | **Encryption** | AES-256-GCM (symmetric) or RSA-4096 (asymmetric) at rest |
-| ☁️ | **Remote storage** | Google Drive via rclone, SFTP, or local directory |
-| ♻️ | **Rotation** | Time-based daily/weekly/monthly retention with quota enforcement |
-| 📦 | **Solid archive** | Optional single tarball (and optional whole-file encryption) for upload so remotes get one file instead of many |
-| ↩️ | **Full restore** | Containers, volumes, networks, and filesystem paths; restore from directory or solid archive file |
-| 📦 | **Backup sets** | Named groups of containers defined in config for repeatable runs |
-| 🤖 | **Agent-friendly CLI** | JSON I/O, `--input-json`, `--dry-run`, and skill discovery on every command |
-| 🛠️ | **Management CLI** | `bbman` for setup, health, updates, cleanup, and diagnostics |
+| Feature | Description |
+|:--|:--|
+| **Rich TUI** | BTOP-style live dashboard with real-time transfer metrics |
+| **Docker backup** | Containers, volumes, networks, and configs in one shot |
+| **Filesystem backup** | Back up any host path recursively with gitignore-style excludes |
+| **Incremental backups** | rsync `--link-dest` so unchanged data is hardlinked, not copied |
+| **Encryption** | AES-256-GCM (symmetric) or RSA-4096 (asymmetric) at rest |
+| **Remote storage** | Google Drive via rclone, SFTP, or local directory |
+| **Rotation** | Time-based daily/weekly/monthly retention with quota enforcement |
+| **Solid archive** | Optional single tarball and optional whole-file encryption for one-file uploads |
+| **Full restore** | Containers, volumes, networks, and filesystem paths; restore from a directory or solid archive file |
+| **Backup sets** | Named groups of containers defined in config for repeatable runs |
+| **Agent-friendly CLI** | JSON I/O, `--input-json`, `--dry-run`, and skill discovery on every command |
+| **Management CLI** | `bbman` for setup, health, updates, cleanup, and diagnostics |
 
 ---
 
 ## Requirements
 
 - Python 3.12+
-- Docker (with socket access for your user)
-- `rsync` (system package — used for volume and filesystem backups)
-- `rclone` (optional, for Google Drive)
+- Docker Engine/daemon, with socket access for the account that runs bbackup
+- `rsync` (system package - used for volume and filesystem backups)
+- `tar` (system package - used for metadata and solid-archive handling)
+- `rclone` (optional, for Google Drive and other rclone remotes)
 
----
+> [!WARNING]
+> Access to the Docker socket, including membership in the `docker` group, is
+> effectively root-equivalent control of the host. Grant it only to an account
+> that is intentionally trusted to manage containers and mounted host paths.
 
 ## Installation
 
-`uv` handles the tool environment automatically.
+`uv tool install` and `uv sync` serve different workflows. The recommended
+isolated tool install is for running bbackup; `uv sync` creates the environment
+for a checked-out project and is where project extras are selected.
 
 ### Install or redeploy from GitHub
 
@@ -105,6 +111,26 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 Open a new shell after `uv tool update-shell` so `bbackup` and `bbman` are on your PATH.
 
+
+### Project checkout and optional extras
+
+For development or a checked-out source tree:
+
+```bash
+git clone https://github.com/CruxExperts/best-backup.git
+cd best-backup
+uv sync --locked
+uv run bbackup --version
+```
+
+The `gdrive-auth` optional dependency is selected in this project environment,
+not by running `uv sync` after an isolated `uv tool install`:
+
+```bash
+uv sync --locked --extra gdrive-auth
+uv run bbman auth-gdrive --client-secrets client_secret.json --dry-run --output json
+```
+
 ### Advanced: system-wide links
 
 Most installs should use the uv tool command above. If `/usr/local/bin/bbackup`
@@ -117,32 +143,59 @@ For development setup, local source installs, and uninstall instructions, see [I
 
 ## Quick start
 
+After installation, confirm that Docker, `rsync`, and `tar` are available and
+that the account running bbackup is allowed to access Docker.
+
 ```bash
-# First-time setup: checks Docker, installs deps, creates config
+# Interactive first-time setup; this creates the starter config
 bbman setup
 
-# Interactive backup with live TUI
-bbackup backup
-
-# Target specific containers
-bbackup backup --containers myapp mydb
-
-# Back up a host filesystem path
-bbackup backup --paths /srv/data
-
-# Non-interactive mode (cron or agent)
-BBACKUP_OUTPUT=json BBACKUP_NO_INTERACTIVE=1 bbackup backup --backup-set production
+# Check Docker, system tools, config, and any configured snapshot profiles
+bbman health --output json
+bbman validate-config --output json
 ```
 
-See [QUICKSTART.md](QUICKSTART.md) for a full walk-through: config, remote storage, encryption setup, and more.
+Edit `~/.config/bbackup/config.yaml` before the first run. The starter template
+leaves encryption disabled and enables a local remote under `~/backups/docker`.
+It also contains an example `snapshot_profiles` block; configure that profile's
+restic repository, password file, and tools before expecting `bbman health` to
+report it healthy, or remove the unused example block.
+
+```bash
+# Inspect the planned scope without creating a backup
+bbackup backup --backup-set production --dry-run --output json
+
+# Run the configured backup (or use `bbackup backup` for the interactive picker)
+bbackup backup --backup-set production --output json
+```
+
+See [QUICKSTART.md](QUICKSTART.md) for the complete first-run walk-through,
+remote storage, encryption setup, manifest check, and restore boundaries.
+
 
 ---
 
-## Integrity And Upload Safety
+## Integrity and upload safety
 
-Each non-cancelled backup writes `backup_manifest.json` with the requested scope, filesystem source paths, volume artifact names, item results, errors, file sizes, and SHA-256 hashes. Restore verifies the manifest when present and fails before mutation if files are missing, changed, unlisted, or outside the backup root.
+Every non-cancelled backup writes `backup_manifest.json` under the local
+staging backup directory. It records the requested scope, source paths, item
+results, errors, file sizes, and SHA-256 hashes. A real restore verifies that
+manifest before mutating Docker or filesystem targets and fails on missing,
+changed, unlisted, or backup-root-escaping files.
 
-Local, SFTP, and rclone uploads write to `.partial` destinations first and promote to the final backup name only after the copy succeeds. When encryption succeeds, plaintext staging is removed so local backup artifacts match the encrypted output.
+The backup is assembled first under `backup.local_staging` (the starter default
+is `/tmp/bbackup_staging`). Each selected or enabled remote is attempted
+independently.
+Local, SFTP, and rclone uploads write to a `.partial` destination and promote
+to the final backup name only after the copy succeeds. A remote failure is
+recorded in per-remote status and errors; inspect those entries and keep the
+local staging artifact until the outcome is understood. Encryption can replace
+plaintext staging with an encrypted artifact.
+
+`bbackup restore --dry-run` is a target-selection plan only: it does not execute
+a restore or verify the manifest. Do not treat it as a data-integrity check.
+Use it before any real restore, and reserve an actual restore for an isolated,
+disposable destination when you need to exercise manifest verification.
 
 ---
 
@@ -180,14 +233,28 @@ For rclone remotes you can optionally set `rclone_options.transfers` and `rclone
 
 Use `bbman auth-gdrive` to create a dedicated Google Drive rclone remote for
 bbackup. The helper uses a Google Desktop app OAuth client secrets file and
-configures rclone; backup uploads still run through rclone.
-The helper targets My Drive by default; shared-drive selection is not exposed
-by this command.
+configures rclone; backup uploads still run through rclone. The helper targets
+My Drive by default; shared-drive selection is not exposed by this command.
+
+The optional `gdrive-auth` dependency is a project extra. For a checked-out
+project, install it with `uv sync` and run the command through that environment:
 
 ```bash
-uv sync --extra gdrive-auth
+uv sync --locked --extra gdrive-auth
+uv run bbman auth-gdrive --client-secrets client_secret.json --dry-run --output json
+uv run bbman auth-gdrive --client-secrets client_secret.json --remote bbackup-gdrive
+```
+
+For the isolated GitHub tool install, do not run `uv sync` in another directory.
+Install the helper packages into the tool environment explicitly:
+
+```bash
+uv tool install --force \
+  --with google-auth-oauthlib \
+  --with oauthlib \
+  --with requests-oauthlib \
+  git+https://github.com/CruxExperts/best-backup.git
 bbman auth-gdrive --client-secrets client_secret.json --dry-run --output json
-bbman auth-gdrive --client-secrets client_secret.json --remote bbackup-gdrive
 ```
 
 For an SSH-hosted bbackup install, forward the fixed callback port from your
@@ -381,7 +448,6 @@ bbackup skills docker-backup            # step-by-step guide + JSON schemas
 
 ```bash
 bbman setup                                          # First-time setup wizard
-bbman setup --no-interactive                         # Skip wizard (agent mode)
 bbman health                                         # Docker, tools, config health check
 bbman health --output json
 bbman check-deps                                     # Check dependencies
@@ -404,6 +470,10 @@ bbman skills maintenance                             # Step-by-step maintenance 
 ```
 
 </details>
+
+`bbman setup` is intentionally interactive. The `--no-interactive` form is
+accepted only to report that setup was skipped and exits with an error; it is
+not a successful agent-mode setup path.
 
 ---
 
@@ -475,11 +545,24 @@ Pass all parameters as a single flat JSON object. Keys use underscores (hyphens 
 
 ```bash
 bbackup restore \
-  --input-json '{"backup_path":"/tmp/bbackup/backup_20260227","containers":["myapp"],"dry_run":true}' \
+  --input-json '{"backup_path":"/tmp/bbackup_staging/backup_YYYYMMDD_HHMMSS","containers":["myapp"],"dry_run":true}' \
   --output json
 ```
 
 Unknown keys are silently ignored — forward-compatible by design.
+
+Restore pre-flight is separate from backup planning:
+
+```bash
+bbackup restore \
+  --backup-path /tmp/bbackup_staging/backup_YYYYMMDD_HHMMSS \
+  --all --dry-run --output json
+```
+
+The restore dry-run reports selected targets and performs no restore, but it
+does not verify the manifest or prove destination permissions. A real restore
+verifies `backup_manifest.json` before mutation; restoring existing containers,
+volumes, networks, or filesystem destinations can be destructive.
 
 ### Dry-run / pre-flight
 
@@ -517,14 +600,18 @@ bbackup backup --containers myapp --dry-run --output json
 | `4` | Partial: some items succeeded, some failed |
 | `5` | Operation cancelled by user or agent |
 
-> [!TIP]
-> For agent workflows, set `BBACKUP_OUTPUT=json` and `BBACKUP_NO_INTERACTIVE=1` globally, then use `bbackup skills` to discover what's available before issuing commands.
+For agent workflows, set `BBACKUP_OUTPUT=json` and `BBACKUP_NO_INTERACTIVE=1` globally, then use `bbackup skills` to discover what's available before issuing commands.
 
 ---
 
 ## Encryption
 
 Two modes are available:
+
+The starter configuration leaves `encryption.enabled: false`, and the setup
+wizard's optional key step defaults to no. First-run artifacts are therefore
+plaintext (the manifest records `encryption_mode: "disabled"`) until you
+generate keys and add the returned config snippet with `enabled: true`.
 
 **Symmetric — AES-256-GCM:** One key encrypts and decrypts. Good for single-server setups.
 
@@ -566,7 +653,7 @@ Full details in [docs/encryption.md](docs/encryption.md).
 
 ## Project structure
 
-```
+```text
 best-backup/
 ├── bbackup/
 │   ├── cli.py                # bbackup CLI entry point
@@ -608,6 +695,10 @@ best-backup/
 | [docs/cli-skills.md](docs/cli-skills.md) | Unified CLI skills catalog for humans and AI agents |
 | [docs/VERSIONING.md](docs/VERSIONING.md) | Version source of truth, hook setup, and release validation |
 | [docs/PUBLISHING_CHECKLIST.md](docs/PUBLISHING_CHECKLIST.md) | GitHub publishing and release readiness checklist |
+| [docs/standards/github-markdown/github-markdown-writing-standard.md](docs/standards/github-markdown/github-markdown-writing-standard.md) | Governing standard for GitHub-facing Markdown |
+| [docs/standards/github-markdown/github-markdown-capabilities-reference.md](docs/standards/github-markdown/github-markdown-capabilities-reference.md) | Supported GitHub Markdown syntax and context limits |
+| [docs/standards/github-markdown/github-markdown-review-checklist.md](docs/standards/github-markdown/github-markdown-review-checklist.md) | Review gate for new and revised Markdown |
+| [docs/standards/github-markdown/github-markdown-source-provenance.md](docs/standards/github-markdown/github-markdown-source-provenance.md) | Official source register and adaptation record |
 
 ---
 

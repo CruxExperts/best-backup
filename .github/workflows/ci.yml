@@ -33,7 +33,7 @@ jobs:
         run: uv sync --locked
 
       - name: Lint with ruff
-        run: uv run ruff check bbackup/ scripts/check_publishing_ready.py scripts/check_version_sync.py scripts/smoke_installed_artifact.py scripts/generate_cli_skills.py tests/
+        run: uv run ruff check bbackup/ scripts/check_markdown_standards.py scripts/check_publishing_ready.py scripts/check_version_sync.py scripts/smoke_installed_artifact.py scripts/generate_cli_skills.py tests/
 
       - name: Check syntax (py_compile)
         run: |
@@ -61,6 +61,9 @@ jobs:
 
       - name: Verify publishing readiness
         run: uv run python scripts/check_publishing_ready.py
+
+      - name: Verify public Markdown standards
+        run: uv run python scripts/check_markdown_standards.py
 
       - name: Verify installed artifact smoke test
         run: |

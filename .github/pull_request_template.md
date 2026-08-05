@@ -20,6 +20,7 @@
 - [ ] Commit messages follow conventional commit format (`feat:`, `fix:`, `docs:`, etc.)
 - [ ] Documentation updated if behavior changed
 - [ ] No secrets, keys, or personal data included
+- [ ] Public Markdown follows the [GitHub Markdown Writing Standard](../docs/standards/github-markdown/github-markdown-writing-standard.md); run `uv run python scripts/check_markdown_standards.py` when docs change.
 
 ## Testing
 

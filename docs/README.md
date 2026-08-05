@@ -15,6 +15,11 @@
 | [VERSIONING.md](VERSIONING.md) | Release version source of truth, hook setup, and validation commands |
 | [PUBLISHING_CHECKLIST.md](PUBLISHING_CHECKLIST.md) | GitHub publishing and release readiness checklist |
 | [assets/README.md](assets/README.md) | Documentation image inventory and visual standards |
+| [standards/github-markdown/github-markdown-writing-standard.md](standards/github-markdown/github-markdown-writing-standard.md) | Governing standard for GitHub-facing Markdown |
+| [standards/github-markdown/github-markdown-capabilities-reference.md](standards/github-markdown/github-markdown-capabilities-reference.md) | Supported GitHub Markdown syntax and context limits |
+| [standards/github-markdown/github-markdown-review-checklist.md](standards/github-markdown/github-markdown-review-checklist.md) | Review gate for new and revised Markdown |
+| [standards/github-markdown/github-markdown-source-provenance.md](standards/github-markdown/github-markdown-source-provenance.md) | Official source register and adaptation record |
+| [standards/github-markdown/github-markdown-provenance-manifest.json](standards/github-markdown/github-markdown-provenance-manifest.json) | Machine-readable source and output checksum manifest |
 | [prompts/bootstrap-planning-agent.md](prompts/bootstrap-planning-agent.md) | Planning handoff for Codex-maintenance work |
 
 ---
