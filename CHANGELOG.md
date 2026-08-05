@@ -10,10 +10,31 @@ current uv-based install, development, and release instructions.
 
 ## [Unreleased]
 
+---
+
+## [1.8.6] - 2026-08-04
+
+### Added
+
+- Optional secure Google Drive OAuth setup through `bbman auth-gdrive`, including dry-run and JSON output, redacted diagnostics, and headless SSH callback guidance. The helper configures My Drive remotes; live Google authorization is not exercised in automated tests.
+- A repository-wide GitHub Markdown standard, capabilities reference, review checklist, provenance manifest, and CI/pre-push validator now govern public documentation.
+
+### Changed
+
+- Pytest uses bounded xdist auto-workers and isolated Docker integration resources to reduce runtime without overcommitting shared hosts.
+- CI and release validation install checksum-pinned restic 0.19.1 so native snapshot lifecycle tests cannot silently skip.
+
 ### Fixed
 
-- Snapshot runs now apply configured active-repository and include-path retention through scoped, conjunctive tag selectors.
+- Snapshot runs apply configured active-repository and include-path retention through scoped, conjunctive tag selectors.
+- Snapshot retirement and purge planning isolate snapshots by host and repository, reconcile removed IDs without losing history, and use exact ledger snapshot IDs.
 - Generated schedule services share a user-runtime lock so backup, maintenance, and verification jobs do not overlap.
+- Google Drive configuration handles rclone continuation responses, bounds continuation calls, loads optional support lazily, and defaults to My Drive without exposing shared-drive selection.
+
+### Security
+
+- Removed the unused GitPython dependency and its `gitdb` and `smmap` transitive packages, eliminating the repository's exposure to their known advisories.
+- Raised the `cryptography` dependency floor to 50.0.0, the first release fixing GHSA-g6cj-pr64-35w5 / CVE-2026-69247, and made health/setup checks reject older or prerelease versions.
 
 ---
 
@@ -303,7 +324,8 @@ current uv-based install, development, and release instructions.
 
 The `Unreleased` comparison is a live `HEAD` link for navigation, not an immutable historical citation.
 
-[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.8.5...HEAD
+[Unreleased]: https://github.com/CruxExperts/best-backup/compare/v1.8.6...HEAD
+[1.8.6]: https://github.com/CruxExperts/best-backup/compare/v1.8.5...v1.8.6
 [1.8.5]: https://github.com/CruxExperts/best-backup/compare/v1.8.4...v1.8.5
 [1.8.4]: https://github.com/CruxExperts/best-backup/compare/v1.8.3...v1.8.4
 [1.8.3]: https://github.com/CruxExperts/best-backup/compare/v1.8.2...v1.8.3
